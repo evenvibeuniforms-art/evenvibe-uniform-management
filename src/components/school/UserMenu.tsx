@@ -1,0 +1,43 @@
+"use client";
+
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LogOut } from "lucide-react";
+import { logout } from "@/app/(auth)/login/actions";
+
+export function UserMenu({ email, schoolName }: { email: string, schoolName: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="relative h-8 w-8 rounded-full outline-none focus:ring-2 focus:ring-emerald-500 ring-offset-2">
+        <Avatar className="h-8 w-8 bg-emerald-100 text-emerald-800">
+          <AvatarFallback>{schoolName.substring(0, 2).toUpperCase()}</AvatarFallback>
+        </Avatar>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56" align="end">
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col space-y-1">
+            <p className="text-sm font-medium leading-none">{schoolName}</p>
+            <p className="text-xs leading-none text-muted-foreground">{email}</p>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="p-0">
+          <form action={logout} className="w-full">
+            <button type="submit" className="flex w-full items-center px-2 py-1.5 text-red-600">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </button>
+          </form>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
