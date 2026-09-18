@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { SidebarNav } from "@/components/school/SidebarNav";
 import { MobileSidebar } from "@/components/school/MobileSidebar";
 import { UserMenu } from "@/components/school/UserMenu";
+import { SchoolNotificationBell } from "@/components/school/SchoolNotificationBell";
+import { getSchoolNotifications } from "@/app/(admin)/admin/notifications/actions";
 import { LogOut } from "lucide-react";
 import { logout } from "@/app/(auth)/login/actions";
 import { Button } from "@/components/ui/button";
@@ -14,13 +16,12 @@ export default async function SchoolLayout({
 }) {
   const profile = await requireSchoolAdmin();
   
-  // Fetch school data
+  // Fetch school data & notifications
   const supabase = await createClient();
-  const { data: school } = await supabase
-    .from("schools")
-    .select("name")
-    .eq("id", profile.school_id)
-    .single();
+  const [{ data: school }, notifsData] = await Promise.all([
+    supabase.from("schools").select("name").eq("id", profile.school_id).single(),
+    getSchoolNotifications(1, 10),
+  ]);
 
   const user = (await supabase.auth.getUser()).data.user;
 
@@ -67,6 +68,10 @@ export default async function SchoolLayout({
               <h1 className="text-xl font-semibold text-slate-900 hidden sm:block">School Dashboard</h1>
             </div>
             <div className="flex items-center gap-x-4 lg:gap-x-6">
+              <SchoolNotificationBell
+                initialNotifications={notifsData.notifications}
+                initialUnreadCount={notifsData.unreadCount}
+              />
               <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-slate-200" aria-hidden="true" />
               <UserMenu email={user?.email || ""} schoolName={school?.name || "School"} />
             </div>

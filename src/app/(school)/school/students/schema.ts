@@ -1,13 +1,29 @@
 import { z } from "zod";
+import { STANDARD_CLASSES } from "@/lib/constants/classes";
 
-// Zod schema for validation
+export const VALID_GENDERS = ["Male", "Female"] as const;
+export type ValidGender = (typeof VALID_GENDERS)[number];
+
+// Zod schema for student creation and editing validation
 export const studentSchema = z.object({
-  student_name: z.string().trim().min(2, "Student name must be at least 2 characters"),
-  class_name: z.string().trim().min(1, "Class is required"),
-  section: z.string().trim().min(1, "Section is required"),
-  roll_number: z.string().trim().min(1, "Roll number is required"),
-  gender: z.string().optional().or(z.literal("")),
-  date_of_birth: z.string().optional().or(z.literal("")),
+  student_name: z
+    .string({ error: "Student name is required." })
+    .trim()
+    .min(1, "Student name is required."),
+  admission_number: z
+    .string({ error: "Admission number is required." })
+    .trim()
+    .min(1, "Admission number is required."),
+  class_name: z.enum([...STANDARD_CLASSES] as [string, ...string[]], {
+    error: "Please select a valid class.",
+  }),
+  section: z
+    .string({ error: "Section is required." })
+    .trim()
+    .min(1, "Section is required."),
+  gender: z.enum(VALID_GENDERS, {
+    error: "Please select a gender.",
+  }),
   is_active: z.boolean(),
 });
 

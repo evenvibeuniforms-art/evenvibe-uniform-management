@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -119,10 +120,13 @@ export function SchoolLogoCard({ schoolName, logo, signedUrl }: SchoolLogoCardPr
           <div className="space-y-4">
             <div className="relative w-full aspect-[4/3] rounded-lg overflow-hidden border border-slate-200 bg-white flex items-center justify-center p-4">
               {signedUrl ? (
-                <img
+                <Image
                   src={signedUrl}
                   alt={`${schoolName} school uniform logo`}
-                  className="object-contain w-full h-full"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 400px"
+                  className="object-contain p-4"
+                  unoptimized
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center text-center text-slate-400">
@@ -178,7 +182,14 @@ export function SchoolLogoCard({ schoolName, logo, signedUrl }: SchoolLogoCardPr
                       <div className="space-y-4">
                         <div className="flex justify-center border rounded-md p-4 bg-slate-50">
                           {previewUrl && (
-                            <img src={previewUrl} alt="Preview" className="max-h-48 object-contain" />
+                            <Image
+                              src={previewUrl}
+                              alt="Preview"
+                              width={300}
+                              height={192}
+                              className="max-h-48 w-auto object-contain"
+                              unoptimized
+                            />
                           )}
                         </div>
                         <div className="flex justify-between items-center text-sm">
@@ -254,7 +265,14 @@ export function SchoolLogoCard({ schoolName, logo, signedUrl }: SchoolLogoCardPr
                     <div className="space-y-4">
                       <div className="flex justify-center border rounded-md p-4 bg-slate-50">
                         {previewUrl && (
-                          <img src={previewUrl} alt="Preview" className="max-h-48 object-contain" />
+                          <Image
+                            src={previewUrl}
+                            alt="Preview"
+                            width={300}
+                            height={192}
+                            className="max-h-48 w-auto object-contain"
+                            unoptimized
+                          />
                         )}
                       </div>
                       <div className="flex justify-between items-center text-sm">

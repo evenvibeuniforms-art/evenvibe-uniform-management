@@ -74,3 +74,4 @@ export async function rejectSchool(schoolId: string) {
     return { error: "An unexpected error occurred." };
   }
 }
+

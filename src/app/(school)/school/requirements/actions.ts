@@ -9,19 +9,9 @@ export type RequirementPreview = {
   completedSizes: number;
   pendingSizes: number;
   completionPercentage: number;
-  regularStudents: number;
-  tshirtStudents: number;
   quantities: {
-    regular: {
-      shirt: Record<string, number>;
-      pant: Record<string, number>;
-      short: Record<string, number>;
-    };
-    tshirt: {
-      tshirt: Record<string, number>;
-      pant: Record<string, number>;
-      short: Record<string, number>;
-    };
+    Male: Record<string, Record<string, number>>;
+    Female: Record<string, Record<string, number>>;
   };
   classSummary: Array<{
     className: string;
@@ -41,31 +31,72 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
     const supabase = await createClient();
 
     // 1. Check for active requirements and orders
-    const { data: requirements, error: reqError } = await supabase
-      .from("requirements")
-      .select("status, requirement_number, orders(order_number)")
+    // Active orders are in-flight (not delivered or cancelled).
+    const ACTIVE_ORDER_STATUSES = [
+      "submitted",
+      "under_review",
+      "confirmed",
+      "production",
+      "quality_check",
+      "packed",
+      "dispatched",
+      "in_transit",
+    ];
+
+    const { data: activeOrders, error: orderError } = await supabase
+      .from("orders")
+      .select("id, order_number, status, requirement_id, requirements(id, requirement_number, status)")
       .eq("school_id", profile.school_id)
-      .in("status", ["submitted", "under_review", "confirmed"])
+      .in("status", ACTIVE_ORDER_STATUSES)
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (reqError) throw reqError;
+    if (orderError) throw orderError;
 
-    const hasActiveRequirement = requirements && requirements.length > 0;
-    const activeRequirementStatus = hasActiveRequirement ? requirements[0].status : null;
-    const activeRequirementNumber = hasActiveRequirement ? requirements[0].requirement_number : null;
-    let activeOrderNumber = null;
-    
-    if (hasActiveRequirement && requirements[0].orders && requirements[0].orders.length > 0) {
-      activeOrderNumber = (requirements[0].orders[0] as { order_number: string }).order_number;
+    let hasActiveRequirement = false;
+    let activeRequirementStatus: string | null = null;
+    let activeRequirementNumber: string | null = null;
+    let activeOrderNumber: string | null = null;
+
+    if (activeOrders && activeOrders.length > 0) {
+      const activeOrder = activeOrders[0];
+      hasActiveRequirement = true;
+      activeOrderNumber = activeOrder.order_number;
+      activeRequirementStatus = activeOrder.status;
+      const reqObj = Array.isArray(activeOrder.requirements)
+        ? (activeOrder.requirements[0] as { requirement_number?: string } | undefined)
+        : (activeOrder.requirements as { requirement_number?: string } | null);
+      activeRequirementNumber = reqObj?.requirement_number || null;
+    } else {
+      // Check for unlinked active requirements without orders or with in-flight orders
+      const { data: unlinkedReqs, error: reqError } = await supabase
+        .from("requirements")
+        .select("id, status, requirement_number, orders(id, status)")
+        .eq("school_id", profile.school_id)
+        .in("status", ["draft", "submitted", "under_review", "confirmed"])
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (reqError) throw reqError;
+
+      if (unlinkedReqs && unlinkedReqs.length > 0) {
+        const req = unlinkedReqs[0];
+        const linkedOrders = Array.isArray(req.orders) ? req.orders : (req.orders ? [req.orders] : []);
+        const hasTerminalOrder = linkedOrders.length > 0 && linkedOrders.every((o: { status: string }) => o.status === "delivered" || o.status === "cancelled");
+        if (!hasTerminalOrder) {
+          hasActiveRequirement = true;
+          activeRequirementStatus = req.status;
+          activeRequirementNumber = req.requirement_number;
+        }
+      }
     }
 
     // 2. Fetch total students count
     const { data: students, error: studError } = await supabase
       .from("students")
       .select(`
-        id, class_name,
-        student_uniform_sizes (uniform_type, shirt_size, tshirt_size, pant_size, short_size, is_complete)
+        id, class_name, gender,
+        student_uniform_sizes (dynamic_sizes, is_complete)
       `)
       .eq("school_id", profile.school_id);
 
@@ -73,14 +104,29 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
 
     const totalStudents = students?.length || 0;
     let completedSizes = 0;
-    let regularStudents = 0;
-    let tshirtStudents = 0;
+    const { data: configs } = await supabase
+      .from("school_uniform_configurations")
+      .select(`
+        gender,
+        items:school_uniform_configuration_items(id, item_name)
+      `)
+      .eq("school_id", profile.school_id);
+
+    const configMap: Record<string, { gender: string, item_name: string }> = {};
+    configs?.forEach(c => {
+      if (c.items) {
+        c.items.forEach((item: { id: string, item_name: string }) => {
+          configMap[item.id] = { gender: c.gender, item_name: item.item_name };
+        });
+      }
+    });
+
+    const quantities: RequirementPreview["quantities"] = {
+      Male: {},
+      Female: {}
+    };
 
     const classSummaryMap: Record<string, { total: number; completed: number; pending: number }> = {};
-    const quantities = {
-      regular: { shirt: {} as Record<string, number>, pant: {} as Record<string, number>, short: {} as Record<string, number> },
-      tshirt: { tshirt: {} as Record<string, number>, pant: {} as Record<string, number>, short: {} as Record<string, number> },
-    };
 
     students?.forEach(student => {
       const cls = student.class_name || "Unassigned";
@@ -95,16 +141,18 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
         completedSizes++;
         classSummaryMap[cls].completed++;
 
-        if (record.uniform_type === "regular") {
-          regularStudents++;
-          if (record.shirt_size) quantities.regular.shirt[record.shirt_size] = (quantities.regular.shirt[record.shirt_size] || 0) + 1;
-          if (record.pant_size) quantities.regular.pant[record.pant_size] = (quantities.regular.pant[record.pant_size] || 0) + 1;
-          if (record.short_size) quantities.regular.short[record.short_size] = (quantities.regular.short[record.short_size] || 0) + 1;
-        } else if (record.uniform_type === "tshirt") {
-          tshirtStudents++;
-          if (record.tshirt_size) quantities.tshirt.tshirt[record.tshirt_size] = (quantities.tshirt.tshirt[record.tshirt_size] || 0) + 1;
-          if (record.pant_size) quantities.tshirt.pant[record.pant_size] = (quantities.tshirt.pant[record.pant_size] || 0) + 1;
-          if (record.short_size) quantities.tshirt.short[record.short_size] = (quantities.tshirt.short[record.short_size] || 0) + 1;
+        const ds = record.dynamic_sizes || {};
+        for (const [itemId, size] of Object.entries(ds)) {
+          if (!size) continue;
+          const mapped = configMap[itemId];
+          if (mapped) {
+            const { gender, item_name } = mapped;
+            const g = gender as "Male" | "Female";
+            if (!quantities[g][item_name]) {
+              quantities[g][item_name] = {};
+            }
+            quantities[g][item_name][size as string] = (quantities[g][item_name][size as string] || 0) + 1;
+          }
         }
       } else {
         classSummaryMap[cls].pending++;
@@ -125,8 +173,6 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
         completedSizes,
         pendingSizes,
         completionPercentage,
-        regularStudents,
-        tshirtStudents,
         quantities,
         classSummary,
         hasActiveRequirement,
@@ -141,13 +187,19 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
   }
 }
 
-export async function submitRequirement(): Promise<{ success: boolean; requirementId?: string; error?: string }> {
+export async function submitRequirement(selectedStudentIds?: string[]): Promise<{ success: boolean; requirementId?: string; error?: string }> {
   try {
     await requireSchoolAdmin();
     const supabase = await createClient();
 
+    if (selectedStudentIds && selectedStudentIds.length === 0) {
+      return { success: false, error: "Please select at least one student for this order." };
+    }
+
     // Call the Postgres RPC
-    const { data, error } = await supabase.rpc("submit_requirement");
+    const { data, error } = await supabase.rpc("submit_requirement", {
+      p_student_ids: selectedStudentIds && selectedStudentIds.length > 0 ? selectedStudentIds : null,
+    });
 
     if (error) {
       console.error("RPC submit_requirement error:", error);
@@ -157,6 +209,8 @@ export async function submitRequirement(): Promise<{ success: boolean; requireme
     if (data && data.success) {
       revalidatePath("/school");
       revalidatePath("/school/requirements");
+      revalidatePath("/school/orders");
+      revalidatePath("/admin/orders");
       return { success: true, requirementId: data.requirement_id };
     } else {
       return { success: false, error: data?.error || "Unknown error occurred during submission." };

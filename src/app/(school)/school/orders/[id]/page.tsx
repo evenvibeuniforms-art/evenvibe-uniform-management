@@ -1,5 +1,5 @@
 import { getOrderDetails } from "../actions";
-import { OrderTracking } from "@/components/school/OrderTracking";
+import { SchoolOrderDetailsView } from "./SchoolOrderDetailsView";
 import { AlertCircle, PackageSearch } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -41,5 +41,5 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
     );
   }
 
-  return <OrderTracking order={order} />;
+  return <SchoolOrderDetailsView order={order} />;
 }

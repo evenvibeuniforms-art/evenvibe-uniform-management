@@ -6,16 +6,21 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { RequirementRealtimeListener } from "@/components/school/RequirementRealtimeListener";
+
 interface RequirementItem {
   id: string;
   requirement_id: string;
-  uniform_type: "regular" | "tshirt";
-  item_type: "shirt" | "tshirt" | "pant" | "short";
+  uniform_type?: string;
+  item_type?: string;
+  gender?: string;
+  item_name?: string;
   size: string;
   quantity: number;
 }
 
-export default async function RequirementDetailsPage({ params }: { params: { id: string } }) {
+export default async function RequirementDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const profile = await requireSchoolAdmin();
   const supabase = await createClient();
 
@@ -26,7 +31,7 @@ export default async function RequirementDetailsPage({ params }: { params: { id:
       *,
       requirement_items (*)
     `)
-    .eq("id", params.id)
+    .eq("id", id)
     .eq("school_id", profile.school_id)
     .single();
 
@@ -34,23 +39,27 @@ export default async function RequirementDetailsPage({ params }: { params: { id:
     return notFound();
   }
 
-  // Calculate totals
-  let totalShirts = 0;
-  let totalTShirts = 0;
-  let totalPants = 0;
-  let totalShorts = 0;
+  // Calculate total items across all categories
+  const totalItems = requirement.requirement_items.reduce((acc: number, item: RequirementItem) => acc + item.quantity, 0);
 
-  requirement.requirement_items.forEach((item: RequirementItem) => {
-    if (item.item_type === "shirt") totalShirts += item.quantity;
-    if (item.item_type === "tshirt") totalTShirts += item.quantity;
-    if (item.item_type === "pant") totalPants += item.quantity;
-    if (item.item_type === "short") totalShorts += item.quantity;
-  });
+  // Group by Gender -> Item Name (New) OR Uniform Type -> Item Type (Legacy)
+  const groupedItems = requirement.requirement_items.reduce((acc: Record<string, Record<string, RequirementItem[]>>, item: RequirementItem) => {
+    // Determine category (e.g. Male, Female OR Regular, T-Shirt)
+    const category = item.gender || item.uniform_type || "Other";
+    // Determine subcategory (e.g. Shirt, Pant)
+    const subCategory = item.item_name || item.item_type || "Unknown Item";
+
+    if (!acc[category]) acc[category] = {};
+    if (!acc[category][subCategory]) acc[category][subCategory] = [];
+    acc[category][subCategory].push(item);
+    return acc;
+  }, {});
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20">
+      <RequirementRealtimeListener schoolId={profile.school_id} />
       <div className="flex items-center gap-4">
-        <Link href="/school">
+        <Link href="/school/requirements">
           <Button variant="outline" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -87,7 +96,7 @@ export default async function RequirementDetailsPage({ params }: { params: { id:
             <div className="flex justify-between pt-2">
               <span className="text-slate-500 font-semibold">Total Items</span>
               <span className="font-bold text-emerald-600 text-lg">
-                {totalShirts + totalTShirts + totalPants + totalShorts}
+                {totalItems}
               </span>
             </div>
           </CardContent>
@@ -100,116 +109,45 @@ export default async function RequirementDetailsPage({ params }: { params: { id:
           </CardHeader>
           <CardContent>
             <div className="grid sm:grid-cols-2 gap-6">
-              {/* Regular Uniform */}
-              <div className="space-y-4 border rounded-lg p-4 bg-slate-50">
-                <h3 className="font-semibold text-slate-800 flex justify-between">
-                  Regular Uniform 
-                  <Badge variant="secondary">{totalShirts + totalPants + totalShorts} items</Badge>
-                </h3>
-                <div className="space-y-3">
-                  {/* Shirts */}
-                  <div>
-                    <h4 className="text-xs font-semibold text-slate-500 uppercase">Shirts</h4>
-                    <ul className="text-sm">
-                      {requirement.requirement_items
-                        .filter((i: RequirementItem) => i.uniform_type === "regular" && i.item_type === "shirt")
-                        .sort((a: RequirementItem, b: RequirementItem) => a.size.localeCompare(b.size, undefined, { numeric: true }))
-                        .map((item: RequirementItem) => (
-                          <li key={item.id} className="flex justify-between py-1 border-b border-slate-100 last:border-0">
-                            <span>Size {item.size}</span>
-                            <span className="font-medium">{item.quantity}</span>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                  {/* Pants */}
-                  <div>
-                    <h4 className="text-xs font-semibold text-slate-500 uppercase">Pants</h4>
-                    <ul className="text-sm">
-                      {requirement.requirement_items
-                        .filter((i: RequirementItem) => i.uniform_type === "regular" && i.item_type === "pant")
-                        .sort((a: RequirementItem, b: RequirementItem) => a.size.localeCompare(b.size, undefined, { numeric: true }))
-                        .map((item: RequirementItem) => (
-                          <li key={item.id} className="flex justify-between py-1 border-b border-slate-100 last:border-0">
-                            <span>Size {item.size}</span>
-                            <span className="font-medium">{item.quantity}</span>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                  {/* Shorts */}
-                  <div>
-                    <h4 className="text-xs font-semibold text-slate-500 uppercase">Shorts</h4>
-                    <ul className="text-sm">
-                      {requirement.requirement_items
-                        .filter((i: RequirementItem) => i.uniform_type === "regular" && i.item_type === "short")
-                        .sort((a: RequirementItem, b: RequirementItem) => a.size.localeCompare(b.size, undefined, { numeric: true }))
-                        .map((item: RequirementItem) => (
-                          <li key={item.id} className="flex justify-between py-1 border-b border-slate-100 last:border-0">
-                            <span>Size {item.size}</span>
-                            <span className="font-medium">{item.quantity}</span>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
+              {Object.keys(groupedItems).sort().map((category: string) => {
+                const subCategories = groupedItems[category] as Record<string, RequirementItem[]>;
+                // Calculate total items in this category
+                const categoryTotal = (Object.values(subCategories).flat() as RequirementItem[]).reduce((acc: number, curr: RequirementItem) => acc + curr.quantity, 0);
 
-              {/* T-Shirt Uniform */}
-              <div className="space-y-4 border rounded-lg p-4 bg-slate-50">
-                <h3 className="font-semibold text-slate-800 flex justify-between">
-                  T-Shirt Uniform 
-                  <Badge variant="secondary">{totalTShirts + totalPants + totalShorts} items</Badge>
-                </h3>
-                <div className="space-y-3">
-                  {/* T-Shirts */}
-                  <div>
-                    <h4 className="text-xs font-semibold text-slate-500 uppercase">T-Shirts</h4>
-                    <ul className="text-sm">
-                      {requirement.requirement_items
-                        .filter((i: RequirementItem) => i.uniform_type === "tshirt" && i.item_type === "tshirt")
-                        .sort((a: RequirementItem, b: RequirementItem) => a.size.localeCompare(b.size, undefined, { numeric: true }))
-                        .map((item: RequirementItem) => (
-                          <li key={item.id} className="flex justify-between py-1 border-b border-slate-100 last:border-0">
-                            <span>Size {item.size}</span>
-                            <span className="font-medium">{item.quantity}</span>
-                          </li>
-                        ))}
-                    </ul>
+                return (
+                  <div key={category} className="space-y-4 border rounded-lg p-4 bg-slate-50">
+                    <h3 className="font-semibold text-slate-800 flex justify-between capitalize">
+                      {category.replace("_", " ")}
+                      <Badge variant="secondary">{categoryTotal} items</Badge>
+                    </h3>
+                    <div className="space-y-3">
+                      {Object.keys(subCategories).sort().map((subCategory) => {
+                        const items = subCategories[subCategory] as RequirementItem[];
+                        return (
+                          <div key={subCategory}>
+                            <h4 className="text-xs font-semibold text-slate-500 capitalize">{subCategory.replace("_", " ")}</h4>
+                            <ul className="text-sm">
+                              {items
+                                .sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }))
+                                .map((item) => (
+                                  <li key={item.id} className="flex justify-between py-1 border-b border-slate-100 last:border-0">
+                                    <span>Size {item.size}</span>
+                                    <span className="font-medium">{item.quantity}</span>
+                                  </li>
+                                ))}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  {/* Pants */}
-                  <div>
-                    <h4 className="text-xs font-semibold text-slate-500 uppercase">Pants</h4>
-                    <ul className="text-sm">
-                      {requirement.requirement_items
-                        .filter((i: RequirementItem) => i.uniform_type === "tshirt" && i.item_type === "pant")
-                        .sort((a: RequirementItem, b: RequirementItem) => a.size.localeCompare(b.size, undefined, { numeric: true }))
-                        .map((item: RequirementItem) => (
-                          <li key={item.id} className="flex justify-between py-1 border-b border-slate-100 last:border-0">
-                            <span>Size {item.size}</span>
-                            <span className="font-medium">{item.quantity}</span>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                  {/* Shorts */}
-                  <div>
-                    <h4 className="text-xs font-semibold text-slate-500 uppercase">Shorts</h4>
-                    <ul className="text-sm">
-                      {requirement.requirement_items
-                        .filter((i: RequirementItem) => i.uniform_type === "tshirt" && i.item_type === "short")
-                        .sort((a: RequirementItem, b: RequirementItem) => a.size.localeCompare(b.size, undefined, { numeric: true }))
-                        .map((item: RequirementItem) => (
-                          <li key={item.id} className="flex justify-between py-1 border-b border-slate-100 last:border-0">
-                            <span>Size {item.size}</span>
-                            <span className="font-medium">{item.quantity}</span>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
+                );
+              })}
+              {Object.keys(groupedItems).length === 0 && (
+                <div className="col-span-full py-8 text-center text-slate-500 border rounded-lg border-dashed">
+                  No uniform items found in this requirement.
                 </div>
-              </div>
-
+              )}
             </div>
           </CardContent>
         </Card>

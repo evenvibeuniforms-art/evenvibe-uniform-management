@@ -53,3 +53,42 @@ export interface SchoolLogo {
   updated_at: string
 }
 
+export interface SchoolUniformConfiguration {
+  id: string
+  school_id: string
+  gender: 'Male' | 'Female'
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SchoolUniformConfigurationItem {
+  id: string
+  configuration_id: string
+  item_name: string
+  available_sizes: string[]
+  is_required: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TcStudent {
+  id: string
+  school_id: string
+  student_id: string
+  tc_number: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TcStudentWithStudent extends TcStudent {
+  student: {
+    id: string
+    student_name: string
+    admission_number: string
+    class_name: string
+    section: string
+    gender: string
+  }
+}

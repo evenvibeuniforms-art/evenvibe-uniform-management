@@ -1,27 +1,65 @@
 import { requireSchoolAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, ClipboardList, Ruler, FileSpreadsheet, Package, Shirt, UserPlus, BarChart3 } from "lucide-react";
+import { Building2, Users, ClipboardList, Ruler, Package, BarChart3, ArrowRight, UserPlus, FileSpreadsheet, Truck, FileText } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { getActiveUniformDesign } from "@/lib/actions/uniform-designs";
 import { getSchoolLogo } from "@/lib/actions/school-logo";
 import { UniformDesignCard } from "@/components/dashboard/uniform-design-card";
 import { SchoolLogoCard } from "@/components/dashboard/school-logo-card";
+import { ClassSectionProgress, ClassProgressData } from "@/components/school/ClassSectionProgress";
+import { SchoolDashboardRealtime } from "@/components/school/SchoolDashboardRealtime";
 
 export default async function SchoolDashboard() {
   const profile = await requireSchoolAdmin();
   
   const supabase = await createClient();
   
-  // 1. Fetch School Info
-  const { data: school, error: schoolError } = await supabase
-    .from("schools")
-    .select("name, school_code")
-    .eq("id", profile.school_id)
-    .single();
+  // Fetch all dashboard data dependencies in parallel
+  const [
+    schoolRes,
+    studentsRes,
+    requirementRes,
+    orderRes,
+    designRes,
+    logoRes,
+  ] = await Promise.all([
+    supabase
+      .from("schools")
+      .select("name, school_code")
+      .eq("id", profile.school_id)
+      .single(),
+    supabase
+      .from("students")
+      .select(`
+        id,
+        class_name,
+        section,
+        is_active,
+        student_uniform_sizes (is_complete, uniform_type)
+      `)
+      .eq("school_id", profile.school_id),
+    supabase
+      .from("requirements")
+      .select("status, requirement_number, total_students, regular_uniform_students, tshirt_uniform_students, submitted_at")
+      .eq("school_id", profile.school_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("orders")
+      .select("order_number, status")
+      .eq("school_id", profile.school_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    getActiveUniformDesign(),
+    getSchoolLogo(),
+  ]);
 
-  if (schoolError || !school) {
+  const school = schoolRes.data;
+  if (schoolRes.error || !school) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <Building2 className="h-12 w-12 text-slate-300 mb-4" />
@@ -31,101 +69,79 @@ export default async function SchoolDashboard() {
     );
   }
 
-  // 2. Fetch Total Students Count (Efficiently)
-  const { count: totalStudents } = await supabase
-    .from("students")
-    .select("*", { count: "exact", head: true })
-    .eq("school_id", profile.school_id);
+  const students = studentsRes.data || [];
+  const totalStudents = students.length;
+  const activeStudents = students.filter(s => s.is_active).length;
+  
+  let completedSizes = 0;
+  let regularCompleted = 0;
+  let tshirtCompleted = 0;
+  
+  const classProgressMap = new Map<string, ClassProgressData>();
 
-  // 3. Fetch Class Data for Distribution
-  const { data: classData } = await supabase
-    .from("students")
-    .select("class_name")
-    .eq("school_id", profile.school_id);
+  students.forEach((student) => {
+    const sizeRecord = Array.isArray(student.student_uniform_sizes) 
+      ? student.student_uniform_sizes[0] 
+      : student.student_uniform_sizes;
+      
+    const isComplete = sizeRecord?.is_complete || false;
+    if (isComplete) {
+      completedSizes++;
+      if (sizeRecord?.uniform_type === 'regular') regularCompleted++;
+      else if (sizeRecord?.uniform_type === 'tshirt') tshirtCompleted++;
+    }
 
-  // Group class data
-  const classCounts = classData?.reduce((acc: Record<string, number>, curr) => {
-    const className = curr.class_name || "Unassigned";
-    acc[className] = (acc[className] || 0) + 1;
-    return acc;
-  }, {});
+    const className = student.class_name || "Unassigned";
+    const section = student.section || "N/A";
+    const key = `${className}-${section}`;
 
-  // 4. Fetch Size Data
-  const { data: sizes } = await supabase
-    .from("student_uniform_sizes")
-    .select("is_complete, uniform_type, shirt_size, tshirt_size, pant_size, short_size")
-    .eq("school_id", profile.school_id);
+    if (!classProgressMap.has(key)) {
+      classProgressMap.set(key, {
+        className,
+        section,
+        total: 0,
+        completed: 0,
+        pending: 0,
+        progressPercentage: 0
+      });
+    }
 
-  const completedSizes = sizes?.filter(s => s.is_complete).length || 0;
-  const pendingSizesCount = (totalStudents || 0) - completedSizes;
-  const progressPercentage = totalStudents ? Math.round((completedSizes / totalStudents) * 100) : 0;
-
-  let shirtCount = 0;
-  let tshirtCount = 0;
-  let pantCount = 0;
-  let shortCount = 0;
-
-  sizes?.forEach(s => {
-    if (s.shirt_size) shirtCount++;
-    if (s.tshirt_size) tshirtCount++;
-    if (s.pant_size) pantCount++;
-    if (s.short_size) shortCount++;
+    const classData = classProgressMap.get(key)!;
+    classData.total++;
+    if (isComplete) {
+      classData.completed++;
+    } else {
+      classData.pending++;
+    }
   });
 
-  // 5. Fetch Pending Students
-  const { data: pendingStudentsData } = await supabase
-    .from("students")
-    .select(`
-      id, student_name, class_name, section, roll_number,
-      student_uniform_sizes (is_complete, uniform_type, shirt_size, tshirt_size, pant_size, short_size)
-    `)
-    .eq("school_id", profile.school_id)
-    .order("class_name")
-    .order("section")
-    .order("roll_number");
+  const pendingSizesCount = totalStudents - completedSizes;
+  const progressPercentage = totalStudents ? Math.round((completedSizes / totalStudents) * 100) : 0;
 
-  const pendingStudentsList = pendingStudentsData?.filter(s => {
-    const record = Array.isArray(s.student_uniform_sizes) ? s.student_uniform_sizes[0] : s.student_uniform_sizes;
-    return !record?.is_complete;
-  }).slice(0, 5) || [];
+  // Calculate percentages for class data and sort
+  const classProgressData = Array.from(classProgressMap.values()).map(data => {
+    data.progressPercentage = data.total ? Math.round((data.completed / data.total) * 100) : 0;
+    return data;
+  }).sort((a, b) => {
+    const classComp = a.className.localeCompare(b.className, undefined, { numeric: true });
+    if (classComp !== 0) return classComp;
+    return a.section.localeCompare(b.section);
+  });
 
-  // 6. Fetch Requirement Status
-  const { data: requirementData } = await supabase
-    .from("requirements")
-    .select("status, requirement_number")
-    .eq("school_id", profile.school_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const requirementStatus = requirementData?.status || "ready";
-
-  // 7. Fetch Current Order
-  const { data: orderData } = await supabase
-    .from("orders")
-    .select("order_number, status")
-    .eq("school_id", profile.school_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { design: activeDesign, signedUrl: activeDesignSignedUrl } = await getActiveUniformDesign();
-  const { logo: schoolLogo, signedUrl: schoolLogoSignedUrl } = await getSchoolLogo();
-
-  const classDistribution = Object.entries(classCounts || {})
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => {
-      // Basic sorting logic for class names if possible, else rely on count or alphabetical
-      return a.name.localeCompare(b.name, undefined, { numeric: true });
-    });
-
+  const requirementData = requirementRes.data;
+  const requirementStatus = requirementData?.status || "Pending Sizes";
+  const orderData = orderRes.data;
+  const orderStatus = orderData?.status || "Not Created";
+  const { design: activeDesign, signedUrl: activeDesignSignedUrl } = designRes;
+  const { logo: schoolLogo, signedUrl: schoolLogoSignedUrl } = logoRes;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-10">
+      <SchoolDashboardRealtime schoolId={profile.school_id} />
       {/* Welcome Section & School Information */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Welcome back</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">School Dashboard</h2>
           <div className="flex items-center gap-3 mt-1 text-slate-600">
             <Building2 className="h-5 w-5" />
             <span className="text-lg font-medium">{school.name}</span>
@@ -139,239 +155,287 @@ export default async function SchoolDashboard() {
         </div>
       </div>
 
-      {/* 1. TOP STATISTICS */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* TOP METRICS */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <Card className="shadow-sm border-slate-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Total Students</CardTitle>
-            <Users className="h-4 w-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{totalStudents || 0}</div>
-            <p className="text-xs text-slate-500 mt-1">Currently enrolled</p>
+          <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+            <span className="text-xs font-medium text-slate-500 uppercase">Total Students</span>
+            <span className="text-2xl font-bold text-slate-900 mt-1">{totalStudents}</span>
           </CardContent>
         </Card>
         
         <Card className="shadow-sm border-slate-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Sizes Collected</CardTitle>
-            <Ruler className="h-4 w-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{completedSizes}</div>
-            <p className="text-xs text-slate-500 mt-1">{progressPercentage}% completion</p>
+          <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+            <span className="text-xs font-medium text-slate-500 uppercase">Active Students</span>
+            <span className="text-2xl font-bold text-emerald-600 mt-1">{activeStudents}</span>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-slate-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Pending Sizes</CardTitle>
-            <ClipboardList className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{pendingSizesCount}</div>
-            <p className="text-xs text-slate-500 mt-1">Students remaining</p>
+          <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+            <span className="text-xs font-medium text-slate-500 uppercase">Sizes Collected</span>
+            <span className="text-2xl font-bold text-emerald-600 mt-1">{completedSizes}</span>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-slate-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Requirement Status</CardTitle>
-            <Package className="h-4 w-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-bold text-slate-900 capitalize">
-              {requirementStatus === "ready" ? "Ready to Submit" : requirementStatus.replace("_", " ")}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              {requirementData ? requirementData.requirement_number : "No active requirement"}
-            </p>
+          <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+            <span className="text-xs font-medium text-slate-500 uppercase">Sizes Pending</span>
+            <span className="text-2xl font-bold text-amber-500 mt-1">{pendingSizesCount}</span>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-slate-200">
+          <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+            <span className="text-xs font-medium text-slate-500 uppercase">Requirement</span>
+            <span className="text-lg font-bold text-slate-900 mt-1 capitalize truncate w-full">{requirementStatus.replace("_", " ")}</span>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-slate-200">
+          <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+            <span className="text-xs font-medium text-slate-500 uppercase">Order Status</span>
+            <span className="text-lg font-bold text-slate-900 mt-1 capitalize truncate w-full">{orderStatus.replace("_", " ")}</span>
           </CardContent>
         </Card>
       </div>
 
+      {/* QUICK ACTIONS */}
+      <Card className="shadow-sm border-slate-200">
+        <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50 rounded-t-xl">
+          <CardTitle className="text-sm font-semibold uppercase tracking-wider text-slate-600">Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-3">
+            <Link href="/school/students/new" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <UserPlus className="h-4 w-4 mr-2" /> Add Student
+            </Link>
+            <Link href="/school/import" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" /> Import Excel
+            </Link>
+            <Link href="/school/sizes" className={buttonVariants({ variant: "default", size: "sm", className: "bg-emerald-600 hover:bg-emerald-700" })}>
+              <Ruler className="h-4 w-4 mr-2" /> Collect Sizes
+            </Link>
+            <Link href="/school/requirements" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <ClipboardList className="h-4 w-4 mr-2" /> Submit Requirement
+            </Link>
+            <Link href="/school/orders" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <Truck className="h-4 w-4 mr-2" /> Track Order
+            </Link>
+            <Link href="/school/reports" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <BarChart3 className="h-4 w-4 mr-2" /> View Reports
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* WORKFLOW PROGRESS */}
+      <Card className="shadow-sm border-slate-200 bg-slate-50/50">
+        <CardHeader className="pb-3 border-b border-slate-100 bg-white rounded-t-xl">
+          <CardTitle className="text-lg">Uniform Management Workflow</CardTitle>
+          <CardDescription>Follow these steps to complete your school&apos;s uniform order</CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 relative">
+            
+            {/* Step 1: Students */}
+            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</div>
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Students</h3>
+              </div>
+              <p className="text-sm font-semibold text-slate-800 mb-1">Add / Import</p>
+              <div className="mt-auto pt-2 border-t border-slate-100">
+                <span className="text-xs font-medium text-emerald-600 flex items-center">
+                  <Users className="w-3.5 h-3.5 mr-1" /> {totalStudents} Students
+                </span>
+              </div>
+            </div>
+
+            {/* Step 2: Class & Section */}
+            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</div>
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Classes</h3>
+              </div>
+              <p className="text-sm font-semibold text-slate-800 mb-1">Select & Manage</p>
+              <div className="mt-auto pt-2 border-t border-slate-100">
+                <span className="text-xs font-medium text-slate-600 flex items-center">
+                  <Building2 className="w-3.5 h-3.5 mr-1" /> {classProgressData.length} Classes
+                </span>
+              </div>
+            </div>
+
+            {/* Step 3: Size Collection */}
+            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</div>
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Sizes</h3>
+              </div>
+              <p className="text-sm font-semibold text-slate-800 mb-1">Collect Sizes</p>
+              <div className="mt-auto pt-2 border-t border-slate-100">
+                <span className={`text-xs font-medium flex items-center ${progressPercentage === 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  <Ruler className="w-3.5 h-3.5 mr-1" /> {completedSizes} / {totalStudents}
+                </span>
+              </div>
+            </div>
+
+            {/* Step 4: Requirement */}
+            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">4</div>
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Requirement</h3>
+              </div>
+              <p className="text-sm font-semibold text-slate-800 mb-1">Review & Submit</p>
+              <div className="mt-auto pt-2 border-t border-slate-100">
+                <span className={`text-xs font-medium flex items-center capitalize ${requirementData ? 'text-emerald-600' : 'text-slate-500'}`}>
+                  <ClipboardList className="w-3.5 h-3.5 mr-1" /> {requirementStatus.replace("_", " ")}
+                </span>
+              </div>
+            </div>
+
+            {/* Step 5: Order */}
+            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">5</div>
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Order</h3>
+              </div>
+              <p className="text-sm font-semibold text-slate-800 mb-1">Track Status</p>
+              <div className="mt-auto pt-2 border-t border-slate-100">
+                <span className={`text-xs font-medium flex items-center capitalize ${orderData ? 'text-emerald-600' : 'text-slate-500'}`}>
+                  <Package className="w-3.5 h-3.5 mr-1" /> {orderStatus.replace("_", " ")}
+                </span>
+              </div>
+            </div>
+
+            {/* Step 6: Reports */}
+            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">6</div>
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Reports</h3>
+              </div>
+              <p className="text-sm font-semibold text-slate-800 mb-1">View Insights</p>
+              <div className="mt-auto pt-2 border-t border-slate-100">
+                <span className="text-xs font-medium text-slate-600 flex items-center">
+                  <BarChart3 className="w-3.5 h-3.5 mr-1" /> Analytics
+                </span>
+              </div>
+            </div>
+            
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-7">
-        
         {/* Left Column (Wider) */}
         <div className="lg:col-span-4 space-y-6">
-          
-          {/* 6. CLASS-WISE STUDENT COUNT */}
+          {/* CLASS & SECTION PROGRESS */}
+          <ClassSectionProgress data={classProgressData} />
+
+          {/* REQUIREMENT & SIZE SUMMARY */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Size Collection Summary */}
+            <Card className="shadow-sm border-slate-200">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <CardTitle className="text-base font-semibold">Size Collection Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                    <span className="text-sm text-slate-600">Total Completed</span>
+                    <span className="text-sm font-bold text-emerald-600">{completedSizes}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                    <span className="text-sm text-slate-600">Total Pending</span>
+                    <span className="text-sm font-bold text-amber-500">{pendingSizesCount}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                    <span className="text-sm text-slate-600">Regular Uniform</span>
+                    <span className="text-sm font-semibold text-slate-900">{regularCompleted} <span className="text-xs font-normal text-slate-500 ml-1">students</span></span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">T-Shirt Uniform</span>
+                    <span className="text-sm font-semibold text-slate-900">{tshirtCompleted} <span className="text-xs font-normal text-slate-500 ml-1">students</span></span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Requirement Summary */}
+            <Card className="shadow-sm border-slate-200">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <CardTitle className="text-base font-semibold">Requirement Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                {requirementData ? (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">Status</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 capitalize">{requirementData.status.replace("_", " ")}</span>
+                    </div>
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">Req Number</span>
+                      <span className="text-sm font-mono font-medium">{requirementData.requirement_number}</span>
+                    </div>
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">Total Students</span>
+                      <span className="text-sm font-semibold text-slate-900">{requirementData.total_students}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-600">Submitted</span>
+                      <span className="text-sm font-semibold text-slate-900">{new Date(requirementData.submitted_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 flex flex-col items-center justify-center text-center">
+                    <FileText className="h-8 w-8 text-slate-200 mb-3" />
+                    <p className="text-sm text-slate-500 font-medium">No requirement submitted</p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-[200px]">Complete size collection for all students first.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+          </div>
+        </div>
+
+        {/* Right Column (Narrower) */}
+        <div className="lg:col-span-3 space-y-6">
+          {/* ORDER SUMMARY */}
           <Card className="shadow-sm border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-lg">Class-wise Students</CardTitle>
-              <CardDescription>Distribution of students across classes</CardDescription>
+            <CardHeader className="pb-3 border-b border-slate-100">
+              <CardTitle className="text-base font-semibold">Order Summary</CardTitle>
             </CardHeader>
-            <CardContent>
-              {classDistribution.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  <Users className="mx-auto h-8 w-8 text-slate-300 mb-3" />
-                  <p>No students added yet.</p>
+            <CardContent className="pt-4">
+              {orderData ? (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                    <span className="text-sm text-slate-600">Order Number</span>
+                    <span className="text-sm font-mono font-medium">{orderData.order_number}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-4 mb-2">
+                    <span className="text-sm text-slate-600">Current Status</span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 capitalize">{orderData.status.replace("_", " ")}</span>
+                  </div>
+                  
+                  <Link 
+                    href="/school/orders"
+                    className="flex w-full items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-md hover:bg-emerald-100 transition-colors"
+                  >
+                    Track Order Progress <ArrowRight className="h-4 w-4" />
+                  </Link>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {classDistribution.map((item) => {
-                    const percentage = totalStudents ? (item.count / totalStudents) * 100 : 0;
-                    return (
-                      <div key={item.name} className="flex items-center gap-4">
-                        <div className="w-24 text-sm font-medium text-slate-700 truncate" title={item.name}>
-                          {item.name}
-                        </div>
-                        <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                          <div 
-                            className="bg-emerald-500 h-2.5 rounded-full" 
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                        <div className="w-12 text-sm text-right font-medium text-slate-600">
-                          {item.count}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="py-8 flex flex-col items-center justify-center text-center">
+                  <Truck className="h-8 w-8 text-slate-200 mb-3" />
+                  <p className="text-sm text-slate-500 font-medium">No active order</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-[200px]">EvenVibe will create an order once your requirement is approved.</p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* 2. UNIFORM SIZE COLLECTION PROGRESS */}
-          <Card className="shadow-sm border-slate-200">
-            <CardHeader className="pb-2">
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="text-lg">Uniform Size Collection</CardTitle>
-                  <CardDescription>Track overall size collection progress</CardDescription>
-                </div>
-                <Link href="/school/sizes" className="text-sm font-medium text-emerald-600 hover:text-emerald-700">
-                  View Details &rarr;
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mt-4">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-medium text-slate-700">Overall Progress</span>
-                  <span className="font-bold text-slate-900">{progressPercentage}%</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                  <div 
-                    className="bg-emerald-500 h-3 rounded-full transition-all duration-500" 
-                    style={{ width: `${progressPercentage}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs text-slate-500 mt-3">
-                  <span>{completedSizes} completed</span>
-                  <span>{pendingSizesCount} pending</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 5. PENDING SIZE COLLECTION */}
-          <Card className="shadow-sm border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-lg">Pending Size Collection</CardTitle>
-              <CardDescription>Students who need size measurements</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto rounded-md border border-slate-200">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3">Student</th>
-                      <th className="px-4 py-3">Class & Sec</th>
-                      <th className="px-4 py-3">Pending Items</th>
-                      <th className="px-4 py-3 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingStudentsList.length > 0 ? (
-                      pendingStudentsList.map(student => {
-                        const record = Array.isArray(student.student_uniform_sizes) ? student.student_uniform_sizes[0] : student.student_uniform_sizes;
-                        const missing: string[] = [];
-                        if (!record) {
-                          missing.push("All");
-                        } else {
-                          if (record.uniform_type === "regular" && !record.shirt_size) missing.push("Shirt");
-                          if (record.uniform_type === "tshirt" && !record.tshirt_size) missing.push("T-Shirt");
-                          if (!record.pant_size && !record.short_size) missing.push("Pant / Short");
-                        }
-                        
-                        return (
-                          <tr key={student.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
-                            <td className="px-4 py-3 font-medium text-slate-900">{student.student_name}</td>
-                            <td className="px-4 py-3 text-slate-600">{student.class_name}-{student.section}</td>
-                            <td className="px-4 py-3">
-                              <span className="text-amber-600 font-medium">{missing.join(", ")}</span>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <Link href="/school/sizes" className="text-emerald-600 hover:text-emerald-700 font-medium">
-                                Collect
-                              </Link>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-slate-500 bg-white">
-                          No pending students!
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-                {pendingSizesCount > 5 && (
-                  <div className="bg-slate-50 border-t border-slate-200 p-2 text-center">
-                    <Link href="/school/sizes" className="text-sm font-medium text-emerald-600 hover:text-emerald-700">
-                      View all {pendingSizesCount} pending students
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 3. UNIFORM CATEGORY PROGRESS */}
-          <Card className="shadow-sm border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-lg">Uniform Categories</CardTitle>
-              <CardDescription>Size collection status by item type</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="rounded-lg border border-slate-200 p-4 text-center bg-emerald-50/30">
-                  <Shirt className="mx-auto h-5 w-5 text-emerald-600 mb-2" />
-                  <div className="text-sm font-medium text-slate-900">Shirt</div>
-                  <div className="text-lg font-bold text-emerald-600 mt-1">{shirtCount}</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-4 text-center bg-emerald-50/30">
-                  <Shirt className="mx-auto h-5 w-5 text-emerald-600 mb-2" />
-                  <div className="text-sm font-medium text-slate-900">T-Shirt</div>
-                  <div className="text-lg font-bold text-emerald-600 mt-1">{tshirtCount}</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-4 text-center bg-emerald-50/30">
-                  <div className="mx-auto h-5 w-5 text-emerald-600 mb-2 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h14l-2 16h-3.5L12 12l-1.5 8H7L5 4z"/></svg>
-                  </div>
-                  <div className="text-sm font-medium text-slate-900">Pant</div>
-                  <div className="text-lg font-bold text-emerald-600 mt-1">{pantCount}</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-4 text-center bg-emerald-50/30">
-                  <div className="mx-auto h-5 w-5 text-emerald-600 mb-2 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h14l-1 9h-4L12 9l-2 4H6l-1-9z"/></svg>
-                  </div>
-                  <div className="text-sm font-medium text-slate-900">Short</div>
-                  <div className="text-lg font-bold text-emerald-600 mt-1">{shortCount}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-        </div>
-
-        {/* Right Column (Narrower) */}
-        <div className="lg:col-span-3 space-y-6">
-          
           {/* SCHOOL UNIFORM LOGO CARD */}
           <SchoolLogoCard
             schoolName={school.name}
@@ -385,88 +449,6 @@ export default async function SchoolDashboard() {
             design={activeDesign} 
             signedUrl={activeDesignSignedUrl} 
           />
-
-          {/* 8. QUICK ACTIONS */}
-          <Card className="shadow-sm border-slate-200">
-
-            <CardHeader>
-              <CardTitle className="text-lg">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Link 
-                href="/school/students" 
-                className={buttonVariants({ className: "w-full justify-start h-12 bg-emerald-600 hover:bg-emerald-700 text-white" })}
-              >
-                <UserPlus className="h-5 w-5 mr-3" />
-                Add Student
-              </Link>
-              <Link 
-                href="/school/students" 
-                className={buttonVariants({ variant: "outline", className: "w-full justify-start h-12 border-slate-200" })}
-              >
-                <Users className="h-5 w-5 mr-3 text-slate-500" />
-                Manage Students
-              </Link>
-              
-              <Link href="/school/reports" className={buttonVariants({ variant: "outline", className: "w-full justify-start h-12 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200" })}>
-                <BarChart3 className="h-5 w-5 mr-3" />
-                View Reports
-              </Link>
-
-              <div className="pt-4 pb-2">
-                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Coming Soon</div>
-                <div className="space-y-2">
-                  <Link href="/school/import" className={buttonVariants({ variant: "outline", className: "w-full justify-start h-12 bg-slate-50 border-dashed hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700" })}>
-                    <FileSpreadsheet className="h-5 w-5 mr-3 text-emerald-600" />
-                    <span className="text-slate-600 font-medium">Import Excel</span>
-                  </Link>
-                  <Link href="/school/sizes" className={buttonVariants({ variant: "outline", className: "w-full justify-start h-12 bg-slate-50 border-dashed hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700" })}>
-                    <Ruler className="h-5 w-5 mr-3 text-emerald-600" />
-                    <span className="text-slate-600 font-medium">Collect Sizes</span>
-                  </Link>
-                  <Link href="/school/requirements" className={buttonVariants({ variant: "outline", className: "w-full justify-start h-12 bg-slate-50 border-dashed hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700" })}>
-                    <ClipboardList className="h-5 w-5 mr-3 text-emerald-600" />
-                    <span className="text-slate-600 font-medium">Requirements</span>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 7. CURRENT ORDER */}
-          <Card className="shadow-sm border-slate-200 bg-emerald-50/30">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Current Order</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {orderData ? (
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-sm font-medium text-slate-500 mb-1">Order Number</div>
-                    <div className="text-lg font-bold text-slate-900">{orderData.order_number}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-slate-500 mb-1">Status</div>
-                    <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800 capitalize">
-                      {orderData.status.replace("_", " ")}
-                    </div>
-                  </div>
-                  <Link 
-                    href="/school/orders"
-                    className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 bg-white border border-emerald-200 rounded-md hover:bg-emerald-50 transition-colors"
-                  >
-                    Track Order &rarr;
-                  </Link>
-                </div>
-              ) : (
-                <div className="py-6 text-center text-slate-500 flex flex-col items-center">
-                  <Package className="h-8 w-8 text-slate-300 mb-3" />
-                  <p className="text-sm">No active order yet.</p>
-                  <p className="text-xs text-slate-400 mt-1 max-w-[200px]">Submit your requirement to automatically generate an order.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

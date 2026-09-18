@@ -5,9 +5,9 @@ import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Download, Upload, AlertCircle, CheckCircle2, ArrowRight, FileType, Trash2 } from "lucide-react";
-import { ParsedStudentRow, excelStudentRowSchema, normalizeDate } from "./schema";
-import { checkDuplicateRollNumbers, bulkCreateStudents } from "./actions";
+import { Download, Upload, AlertCircle, CheckCircle2, ArrowRight, FileType, Trash2, Info } from "lucide-react";
+import { ParsedStudentRow, excelStudentRowSchema, normalizeImportedClass } from "./schema";
+import { checkDuplicateAdmissionNumbers, bulkCreateStudents } from "./actions";
 import Link from "next/link";
 
 
@@ -30,10 +30,36 @@ export default function ImportStudentsPage() {
 
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Student Name", "Class", "Section", "Roll Number", "Gender", "Date of Birth"]
+      ["Student Name", "Admission Number", "Class", "Section", "Gender"],
+      ["Aarav Sharma", "ADM001", "Class 1", "A", "Male"],
+      ["Diya Patel", "ADM002", "4", "B", "Female"],
+      ["Rohan Verma", "ADM003", "10", "A", "Male"]
     ]);
+    ws["!cols"] = [
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 10 },
+      { wch: 12 },
+    ];
+
+    const instructionsWs = XLSX.utils.aoa_to_sheet([
+      ["Field", "Required", "Accepted Formats & Guidance"],
+      ["Student Name", "Yes", "Full name of the student (minimum 2 characters)."],
+      ["Admission Number", "Yes", "Unique school admission/registration number."],
+      ["Class", "Yes", "Pre-KG, LKG, UKG, 1, 2, 3 ... 12 or Class 1, Class 2 ... Class 12. Both short format (e.g. 4) and full format (e.g. Class 4) are accepted."],
+      ["Section", "Yes", "Section identifier (e.g. A, B, C)."],
+      ["Gender", "No", "Male or Female (optional)."],
+    ]);
+    instructionsWs["!cols"] = [
+      { wch: 18 },
+      { wch: 10 },
+      { wch: 80 },
+    ];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Students");
+    XLSX.utils.book_append_sheet(wb, instructionsWs, "Instructions");
     XLSX.writeFile(wb, "Student_Import_Template.xlsx");
   };
 
@@ -74,21 +100,20 @@ export default function ImportStudentsPage() {
       // Map columns
       const colMap = {
         studentName: headers.findIndex(h => h.includes("student name")),
+        admissionNumber: headers.findIndex(h => h.includes("admission number") || h === "adm no"),
         className: headers.findIndex(h => h === "class"),
         section: headers.findIndex(h => h === "section"),
-        rollNumber: headers.findIndex(h => h.includes("roll number") || h === "roll no"),
         gender: headers.findIndex(h => h === "gender"),
-        dob: headers.findIndex(h => h.includes("date of birth") || h === "dob"),
       };
 
-      if (colMap.studentName === -1 || colMap.className === -1) {
-        alert("Missing required columns. Please ensure 'Student Name' and 'Class' columns exist.");
+      if (colMap.studentName === -1 || colMap.className === -1 || colMap.admissionNumber === -1) {
+        alert("Missing required columns. Please ensure 'Student Name', 'Admission Number', and 'Class' columns exist.");
         setIsParsing(false);
         return;
       }
 
       const rows: ParsedStudentRow[] = [];
-      const fileCombinations = new Set<string>();
+      const fileAdmNumbers = new Set<string>();
 
       for (let i = 1; i < rawJson.length; i++) {
         const rowData = rawJson[i];
@@ -97,11 +122,10 @@ export default function ImportStudentsPage() {
         }
 
         const rawStudentName = colMap.studentName !== -1 ? String(rowData[colMap.studentName] || "").trim() : "";
+        const rawAdmNumber = colMap.admissionNumber !== -1 ? String(rowData[colMap.admissionNumber] || "").trim() : "";
         const rawClassName = colMap.className !== -1 ? String(rowData[colMap.className] || "").trim() : "";
         const rawSection = colMap.section !== -1 ? String(rowData[colMap.section] || "").trim() : "";
-        const rawRollNumber = colMap.rollNumber !== -1 ? String(rowData[colMap.rollNumber] || "").trim() : "";
         const rawGender = colMap.gender !== -1 ? String(rowData[colMap.gender] || "").trim() : "";
-        const rawDob = colMap.dob !== -1 ? rowData[colMap.dob] : null;
 
         const rowErrors: string[] = [];
         let status: "valid" | "duplicate" | "error" = "valid";
@@ -109,43 +133,41 @@ export default function ImportStudentsPage() {
         // Zod basic validation
         const parseResult = excelStudentRowSchema.safeParse({
           student_name: rawStudentName,
+          admission_number: rawAdmNumber,
           class_name: rawClassName,
           section: rawSection,
-          roll_number: rawRollNumber,
           gender: rawGender,
-          date_of_birth: rawDob,
         });
 
         if (!parseResult.success) {
           status = "error";
-          parseResult.error.issues.forEach((issue) => rowErrors.push(issue.message));
+          parseResult.error.issues.forEach((issue) => {
+            rowErrors.push(issue.message);
+          });
         }
 
         // Duplicate within file check
-        const normClass = rawClassName.replace(/\s+/g, ' ').trim();
-        const normSection = rawSection.replace(/\s+/g, ' ').trim().toUpperCase();
-        const normRoll = rawRollNumber.trim();
-        const comboKey = `${normClass}-${normSection}-${normRoll}`;
-
-        if (normClass && normSection && normRoll) {
-          if (fileCombinations.has(comboKey)) {
+        
+        if (rawAdmNumber) {
+          if (fileAdmNumbers.has(rawAdmNumber)) {
             status = "duplicate";
-            rowErrors.push("Duplicate roll number in this class and section within the uploaded file");
+            rowErrors.push("Duplicate admission number within the uploaded file");
           } else {
-            fileCombinations.add(comboKey);
+            fileAdmNumbers.add(rawAdmNumber);
           }
         }
 
-        const normalizedDob = normalizeDate(rawDob);
+        const finalClassName = parseResult.success 
+          ? parseResult.data.class_name 
+          : (normalizeImportedClass(rawClassName) || rawClassName);
 
         rows.push({
           rowNumber: i + 1,
-          student_name: rawStudentName,
-          class_name: rawClassName,
-          section: rawSection,
-          roll_number: rawRollNumber,
-          gender: rawGender || null,
-          date_of_birth: normalizedDob,
+          student_name: parseResult.success ? parseResult.data.student_name : rawStudentName,
+          admission_number: rawAdmNumber,
+          class_name: finalClassName,
+          section: parseResult.success ? parseResult.data.section : rawSection,
+          gender: (parseResult.success ? parseResult.data.gender : rawGender) || null,
           status,
           errors: rowErrors,
         });
@@ -169,19 +191,15 @@ export default function ImportStudentsPage() {
     
     // We only check rows that are structurally valid and have the composite keys
     const combinationsToCheck = rows
-      .filter(r => r.status === "valid" && r.class_name && r.section && r.roll_number)
-      .map(r => ({
-        class_name: r.class_name.replace(/\s+/g, ' ').trim(),
-        section: r.section.replace(/\s+/g, ' ').trim().toUpperCase(),
-        roll_number: r.roll_number.trim()
-      }));
+      .filter(r => r.status === "valid" && r.class_name && r.section && r.admission_number)
+      .map(r => r.admission_number.trim());
 
     if (combinationsToCheck.length === 0) {
       setIsCheckingDB(false);
       return;
     }
 
-    const { success, duplicates, error } = await checkDuplicateRollNumbers(combinationsToCheck);
+    const { success, duplicates, error } = await checkDuplicateAdmissionNumbers(combinationsToCheck);
     
     if (!success) {
       alert(error || "Error checking existing duplicates in the database.");
@@ -190,17 +208,25 @@ export default function ImportStudentsPage() {
     }
 
     if (duplicates && duplicates.length > 0) {
-      const duplicateSet = new Set(duplicates.map(d => `${d.class_name}-${d.section}-${d.roll_number}`));
+      const duplicateAdmSet = new Set(duplicates);
       const updatedRows = rows.map(r => {
-        const normClass = r.class_name.replace(/\s+/g, ' ').trim();
-        const normSection = r.section.replace(/\s+/g, ' ').trim().toUpperCase();
-        const normRoll = r.roll_number.trim();
+        const normAdm = r.admission_number.trim();
         
-        if (duplicateSet.has(`${normClass}-${normSection}-${normRoll}`)) {
+        let isDup = false;
+        const newErrors = [...r.errors];
+        
+        if (duplicateAdmSet.has(normAdm)) {
+          isDup = true;
+          if (!newErrors.includes("Admission number already exists in this school")) {
+            newErrors.push("Admission number already exists in this school");
+          }
+        }
+        
+        if (isDup) {
           return {
             ...r,
             status: "duplicate" as const,
-            errors: [...r.errors, "Roll number already exists in this Class and Section"]
+            errors: newErrors
           };
         }
         return r;
@@ -273,7 +299,18 @@ export default function ImportStudentsPage() {
                 </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 space-y-4">
+              <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-950 flex items-start gap-3">
+                <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                <div className="space-y-1 text-xs sm:text-sm">
+                  <p className="font-semibold text-blue-900">Supported Class Formats</p>
+                  <p className="text-blue-800 leading-relaxed">
+                    Class can be entered as short numbers (<strong>1, 2, 3 ... 12</strong>) or full names (<strong>Class 1, Class 2 ... Class 12</strong>), as well as <strong>Pre-KG</strong>, <strong>LKG</strong>, and <strong>UKG</strong>.
+                    Short numbers will automatically be converted to the standard format upon import.
+                  </p>
+                </div>
+              </div>
+
               {!file ? (
                 <div 
                   className="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
@@ -362,9 +399,9 @@ export default function ImportStudentsPage() {
                           <tr>
                             <th className="px-4 py-3 text-slate-400">#</th>
                             <th className="px-4 py-3">Student Name</th>
+                            <th className="px-4 py-3">Adm Number</th>
                             <th className="px-4 py-3">Class</th>
                             <th className="px-4 py-3">Section</th>
-                            <th className="px-4 py-3">Roll No</th>
                             <th className="px-4 py-3">Status</th>
                             <th className="px-4 py-3 min-w-[200px]">Issues</th>
                           </tr>
@@ -374,9 +411,9 @@ export default function ImportStudentsPage() {
                             <tr key={row.rowNumber} className="hover:bg-slate-50/50">
                               <td className="px-4 py-3 text-slate-400">{row.rowNumber}</td>
                               <td className="px-4 py-3 font-medium text-slate-900">{row.student_name || <span className="text-slate-300 italic">Empty</span>}</td>
+                              <td className="px-4 py-3">{row.admission_number || '-'}</td>
                               <td className="px-4 py-3">{row.class_name || '-'}</td>
                               <td className="px-4 py-3">{row.section || '-'}</td>
-                              <td className="px-4 py-3">{row.roll_number || '-'}</td>
                               <td className="px-4 py-3">
                                 {row.status === 'valid' && <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Valid</span>}
                                 {row.status === 'duplicate' && <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Duplicate</span>}

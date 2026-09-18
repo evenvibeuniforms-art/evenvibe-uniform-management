@@ -1,4 +1,5 @@
 "use client";
+import { AllConfigItem } from "@/app/(school)/school/sizes/actions";
 
 import { StudentWithSize } from "@/app/(school)/school/sizes/schema";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,9 +10,10 @@ import { UNIFORM_TYPES } from "@/lib/constants/uniformSizes";
 
 interface PendingSizesTableProps {
   students: StudentWithSize[];
+  configurations: AllConfigItem[];
 }
 
-export function PendingSizesTable({ students }: PendingSizesTableProps) {
+export function PendingSizesTable({ students, configurations }: PendingSizesTableProps) {
   const pendingStudents = students.filter(s => !s.size_record?.is_complete);
 
   if (pendingStudents.length === 0) {
@@ -29,7 +31,8 @@ export function PendingSizesTable({ students }: PendingSizesTableProps) {
           <TableRow>
             <TableHead className="font-semibold text-slate-700">Student</TableHead>
             <TableHead className="font-semibold text-slate-700">Class & Sec</TableHead>
-            <TableHead className="font-semibold text-slate-700">Roll No</TableHead>
+            <TableHead className="font-semibold text-slate-700">Adm. No</TableHead>
+            <TableHead className="font-semibold text-slate-700">Gender</TableHead>
             <TableHead className="font-semibold text-slate-700">Uniform Type</TableHead>
             <TableHead className="font-semibold text-slate-700">Pending Items</TableHead>
             <TableHead className="text-right font-semibold text-slate-700">Action</TableHead>
@@ -52,7 +55,8 @@ export function PendingSizesTable({ students }: PendingSizesTableProps) {
               <TableRow key={student.id}>
                 <TableCell className="font-medium text-slate-900">{student.student_name}</TableCell>
                 <TableCell className="text-slate-600">{student.class_name}-{student.section}</TableCell>
-                <TableCell className="text-slate-600">{student.roll_number}</TableCell>
+                <TableCell className="text-slate-600">{student.admission_number}</TableCell>
+                <TableCell className="text-slate-600 capitalize">{student.gender || "-"}</TableCell>
                 <TableCell className="text-slate-600">
                   {record?.uniform_type === "regular" ? "Regular" : 
                    record?.uniform_type === "tshirt" ? "T-Shirt" : "Not Selected"}
@@ -65,6 +69,7 @@ export function PendingSizesTable({ students }: PendingSizesTableProps) {
                 <TableCell className="text-right">
                   <SizeFormDialog 
                     student={student}
+                    configurations={configurations}
                     trigger={
                       <Button variant={record ? "outline" : "default"} size="sm">
                         {record ? (
@@ -84,3 +89,4 @@ export function PendingSizesTable({ students }: PendingSizesTableProps) {
     </div>
   );
 }
+

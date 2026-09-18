@@ -8,19 +8,36 @@ import {
   School,
   Users,
   ShoppingCart,
-  BarChart,
+  BarChart3,
   Factory,
+  ClipboardCheck,
+  Truck,
+  Scissors,
   Settings,
+  UserCheck,
+  Bell,
 } from "lucide-react";
 
-const navigation = [
+interface NavigationItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  disabled?: boolean;
+}
+
+const navigation: NavigationItem[] = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { name: "Schools", href: "/admin/schools", icon: School },
-  { name: "Students", href: "/admin/students", icon: Users, disabled: true },
-  { name: "Orders", href: "/admin/orders", icon: ShoppingCart, disabled: true },
-  { name: "Reports", href: "/admin/reports", icon: BarChart, disabled: true },
-  { name: "Production", href: "/admin/production", icon: Factory, disabled: true },
-  { name: "Settings", href: "/admin/settings", icon: Settings, disabled: true },
+  { name: "Students", href: "/admin/students", icon: Users },
+  { name: "User Management", href: "/admin/users", icon: UserCheck },
+  { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
+  { name: "Production", href: "/admin/production", icon: Factory },
+  { name: "Quality Check", href: "/admin/quality-check", icon: ClipboardCheck },
+  { name: "Packing & Delivery", href: "/admin/packing-delivery", icon: Truck },
+  { name: "Alterations / Rework", href: "/admin/alterations", icon: Scissors },
+  { name: "Reports & Analytics", href: "/admin/reports", icon: BarChart3 },
+  { name: "Notifications", href: "/admin/notifications", icon: Bell },
+  { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
 export function AdminSidebar() {

@@ -1,43 +1,62 @@
 import * as z from "zod";
 
-export const UNIFORM_TYPES = ["regular", "tshirt"] as const;
-export const ITEM_TYPES = ["shirt", "tshirt", "pant", "short"] as const;
-export const ISSUE_TYPES = [
-  "wrong_size",
-  "stitching_issue",
-  "measurement_issue",
-  "damaged_item",
-  "missing_item",
-  "wrong_item",
-  "other",
+export const ALTERATION_REASONS = [
+  "Size Correction",
+  "Wrong Size Received",
+  "Wrong Item Received",
+  "Damaged Item",
+  "Stitching Issue",
+  "Measurement Issue",
+  "Missing Item",
+  "Other",
 ] as const;
 
-export const alterationFormSchema = z.object({
-  studentId: z.string().uuid("Please select a student"),
-  orderId: z.string().uuid().optional().or(z.literal("")),
-  uniformType: z.enum(UNIFORM_TYPES, { message: "Please select a uniform type" }),
-  itemType: z.enum(ITEM_TYPES, { message: "Please select an item" }),
-  issueType: z.enum(ISSUE_TYPES, { message: "Please select an issue type" }),
-  description: z.string()
-    .trim()
-    .min(5, "Description must be at least 5 characters")
-    .max(1000, "Description is too long"),
-}).superRefine((data, ctx) => {
-  if (data.uniformType === "regular" && data.itemType === "tshirt") {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "T-Shirt is not a valid item for Regular Uniform",
-      path: ["itemType"],
-    });
-  }
-  
-  if (data.uniformType === "tshirt" && data.itemType === "shirt") {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Shirt is not a valid item for T-Shirt Uniform",
-      path: ["itemType"],
-    });
-  }
-});
+export type AlterationReason = (typeof ALTERATION_REASONS)[number];
 
-export type AlterationFormValues = z.infer<typeof alterationFormSchema>;
+export const SIZE_RELATED_REASONS: AlterationReason[] = [
+  "Size Correction",
+  "Wrong Size Received",
+  "Measurement Issue",
+];
+
+export const ALTERATION_STATUSES = [
+  "requested",
+  "under_review",
+  "approved",
+  "rejected",
+  "rework",
+  "completed",
+] as const;
+
+export type AlterationStatus = (typeof ALTERATION_STATUSES)[number];
+
+export const newAlterationSchema = z
+  .object({
+    orderId: z.string().uuid("Please select a delivered order"),
+    studentId: z.string().uuid("Please select a student"),
+    itemName: z.string().min(1, "Please select a uniform item"),
+    reason: z.enum(ALTERATION_REASONS, {
+      message: "Please select a valid reason",
+    }),
+    currentSize: z.string().optional().nullable(),
+    requiredSize: z.string().optional().nullable(),
+    quantity: z.coerce
+      .number()
+      .int("Quantity must be an integer")
+      .min(1, "Quantity must be at least 1"),
+    remarks: z.string().max(1000, "Remarks cannot exceed 1000 characters").optional().nullable(),
+    proofPhotoUrl: z.string().optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (SIZE_RELATED_REASONS.includes(data.reason)) {
+      if (!data.requiredSize || data.requiredSize.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Required size is required for size-related alterations",
+          path: ["requiredSize"],
+        });
+      }
+    }
+  });
+
+export type NewAlterationFormValues = z.infer<typeof newAlterationSchema>;

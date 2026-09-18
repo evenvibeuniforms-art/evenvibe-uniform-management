@@ -1,14 +1,11 @@
 import { Metadata } from "next";
 import { requireSchoolAdmin } from "@/lib/auth/server";
 import { 
-  getOverviewReport, 
-  getClassSectionReport, 
-  getUniformSizeReport, 
-  getPendingSizesReport, 
   getRequirementsReport, 
   getOrdersReport, 
   getAlterationsReport, 
-  getReportFilterOptions 
+  getReportFilterOptions,
+  getAggregatedStudentData
 } from "./actions";
 import { ReportsView } from "./ReportsView";
 
@@ -23,34 +20,28 @@ export default async function ReportsPage() {
   // Run all report queries concurrently on the server
   const [
     filterOptions,
-    overview,
-    classSection,
-    sizeSummary,
-    pendingSizes,
+    aggregated,
     requirements,
     orders,
     alterations
   ] = await Promise.all([
     getReportFilterOptions(),
-    getOverviewReport(),
-    getClassSectionReport(),
-    getUniformSizeReport(),
-    getPendingSizesReport(),
+    getAggregatedStudentData(),
     getRequirementsReport(),
     getOrdersReport(),
-    getAlterationsReport(),
+    getAlterationsReport()
   ]);
 
   return (
     <ReportsView
       filterOptions={filterOptions}
-      initialOverview={overview}
-      initialClassSection={classSection}
-      initialSizeSummary={sizeSummary}
-      initialPendingSizes={pendingSizes}
+      initialOverview={aggregated.overview}
+      initialSizeSummary={aggregated.sizeSummary}
+      initialPendingSizes={aggregated.pendingSizes}
       initialRequirements={requirements}
       initialOrders={orders}
       initialAlterations={alterations}
+      initialStudents={aggregated.students}
     />
   );
 }

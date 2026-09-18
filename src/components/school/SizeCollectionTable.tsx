@@ -1,6 +1,7 @@
 "use client";
+import { AllConfigItem } from "@/app/(school)/school/sizes/actions";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { StudentWithSize } from "@/app/(school)/school/sizes/schema";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -12,27 +13,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 interface SizeCollectionTableProps {
   students: StudentWithSize[];
+  configurations: AllConfigItem[];
 }
 
-export function SizeCollectionTable({ students }: SizeCollectionTableProps) {
+export function SizeCollectionTable({ students, configurations }: SizeCollectionTableProps) {
   const [search, setSearch] = useState("");
-  const [classFilter, setClassFilter] = useState("all");
-  const [sectionFilter, setSectionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [uniformFilter, setUniformFilter] = useState("all");
-
-  const classes = useMemo(() => Array.from(new Set(students.map(s => s.class_name).filter(Boolean))).sort(), [students]);
-  const sections = useMemo(() => Array.from(new Set(students.map(s => s.section).filter(Boolean))).sort(), [students]);
 
   const filteredStudents = students.filter(s => {
     // Search
     const searchMatch = (s.student_name?.toLowerCase() || "").includes(search.toLowerCase()) ||
-                        (s.roll_number?.toLowerCase() || "").includes(search.toLowerCase());
+                        (s.admission_number?.toLowerCase() || "").includes(search.toLowerCase());
     if (!searchMatch) return false;
 
     // Filters
-    if (classFilter !== "all" && s.class_name !== classFilter) return false;
-    if (sectionFilter !== "all" && s.section !== sectionFilter) return false;
     
     // Status
     if (statusFilter === "complete" && !s.size_record?.is_complete) return false;
@@ -53,7 +48,7 @@ export function SizeCollectionTable({ students }: SizeCollectionTableProps) {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input 
               type="search" 
-              placeholder="Search by name or roll no..." 
+              placeholder="Search by name or admission no..." 
               className="pl-9 bg-white"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -61,25 +56,7 @@ export function SizeCollectionTable({ students }: SizeCollectionTableProps) {
           </div>
           
           <div className="flex flex-wrap gap-2 w-full md:w-auto">
-            <Select value={classFilter} onValueChange={(v) => { if (v) setClassFilter(v); }}>
-              <SelectTrigger className="w-[120px] bg-white">
-                <SelectValue placeholder="Class" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Classes</SelectItem>
-                {classes.map(c => <SelectItem key={c} value={c}>Class {c}</SelectItem>)}
-              </SelectContent>
-            </Select>
 
-            <Select value={sectionFilter} onValueChange={(v) => { if (v) setSectionFilter(v); }}>
-              <SelectTrigger className="w-[120px] bg-white">
-                <SelectValue placeholder="Section" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sections</SelectItem>
-                {sections.map(sec => <SelectItem key={sec} value={sec}>Section {sec}</SelectItem>)}
-              </SelectContent>
-            </Select>
 
             <Select value={uniformFilter} onValueChange={(v) => { if (v) setUniformFilter(v); }}>
               <SelectTrigger className="w-[150px] bg-white">
@@ -112,7 +89,8 @@ export function SizeCollectionTable({ students }: SizeCollectionTableProps) {
             <TableRow>
               <TableHead className="font-semibold text-slate-700">Student</TableHead>
               <TableHead className="font-semibold text-slate-700">Class & Sec</TableHead>
-              <TableHead className="font-semibold text-slate-700">Roll No</TableHead>
+              <TableHead className="font-semibold text-slate-700">Adm. No</TableHead>
+              <TableHead className="font-semibold text-slate-700">Gender</TableHead>
               <TableHead className="font-semibold text-slate-700">Uniform Type</TableHead>
               <TableHead className="font-semibold text-slate-700">Status</TableHead>
               <TableHead className="text-right font-semibold text-slate-700">Action</TableHead>
@@ -124,7 +102,8 @@ export function SizeCollectionTable({ students }: SizeCollectionTableProps) {
                 <TableRow key={student.id}>
                   <TableCell className="font-medium text-slate-900">{student.student_name}</TableCell>
                   <TableCell className="text-slate-600">{student.class_name}-{student.section}</TableCell>
-                  <TableCell className="text-slate-600">{student.roll_number}</TableCell>
+                  <TableCell className="text-slate-600">{student.admission_number}</TableCell>
+                  <TableCell className="text-slate-600 capitalize">{student.gender || "-"}</TableCell>
                   <TableCell className="text-slate-600">
                     {student.size_record?.uniform_type === "regular" ? "Regular Uniform" : 
                      student.size_record?.uniform_type === "tshirt" ? "T-Shirt Uniform" : "-"}
@@ -139,6 +118,7 @@ export function SizeCollectionTable({ students }: SizeCollectionTableProps) {
                   <TableCell className="text-right">
                     <SizeFormDialog 
                       student={student}
+                      configurations={configurations}
                       trigger={
                         <Button variant={student.size_record ? "outline" : "default"} size="sm">
                           {student.size_record ? (
@@ -154,7 +134,7 @@ export function SizeCollectionTable({ students }: SizeCollectionTableProps) {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
                   No students found matching your filters.
                 </TableCell>
               </TableRow>
@@ -165,3 +145,4 @@ export function SizeCollectionTable({ students }: SizeCollectionTableProps) {
     </div>
   );
 }
+

@@ -11,46 +11,46 @@ export async function createStudent(data: StudentFormValues) {
     // 1. Verify authenticated user and role, and retrieve secure school_id
     const profile = await requireSchoolAdmin();
     
-    // 2. Validate input
+    // 2. Strict server-side validation using studentSchema
     const validatedData = studentSchema.parse(data);
     
-    // Normalize fields
-    const class_name = (validatedData.class_name || "").replace(/\s+/g, ' ').trim();
-    const section = (validatedData.section || "").replace(/\s+/g, ' ').trim().toUpperCase();
-    const roll_number = (validatedData.roll_number || "").trim();
+    const student_name = validatedData.student_name.trim();
+    const admission_number = validatedData.admission_number.trim();
+    const class_name = validatedData.class_name;
+    const section = validatedData.section.trim();
+    const gender = validatedData.gender;
 
     const supabase = await createClient();
 
-    // 3. Check for duplicates
-    const { data: existing } = await supabase
+    // 3. Check for duplicate admission number within the same school
+    const { data: existingAdm } = await supabase
       .from("students")
       .select("id")
       .eq("school_id", profile.school_id)
-      .eq("class_name", class_name)
-      .eq("section", section)
-      .eq("roll_number", roll_number)
-      .single();
+      .eq("admission_number", admission_number)
+      .maybeSingle();
 
-    if (existing) {
-      return { success: false, error: `Roll number ${roll_number} already exists in Class ${class_name} - Section ${section}.` };
+    if (existingAdm) {
+      return { success: false, error: `Admission Number ${admission_number} already exists in this school.` };
     }
-    
+
     // 4. Insert student using secure server-side school_id
     const { error } = await supabase
       .from("students")
       .insert({
-        ...validatedData,
-        class_name,
-        section,
-        roll_number,
+        student_name: student_name,
+        admission_number: admission_number,
+        class_name: class_name,
+        section: section,
+        gender: gender,
+        is_active: validatedData.is_active,
         school_id: profile.school_id, // CRITICAL: strictly derived from secure profile
-        date_of_birth: validatedData.date_of_birth || null,
       });
 
     if (error) {
       console.error("Error creating student:", error);
-      if (error.code === '23505') {
-         return { success: false, error: `Roll number ${roll_number} already exists in Class ${class_name} - Section ${section}.` };
+      if (error.code === "23505") {
+        return { success: false, error: `A duplicate record was detected during insertion.` };
       }
       return { success: false, error: "Failed to create student. Please try again." };
     }
@@ -61,7 +61,8 @@ export async function createStudent(data: StudentFormValues) {
   } catch (err) {
     console.error("Error in createStudent:", err);
     if (err instanceof z.ZodError) {
-      return { success: false, error: "Validation failed." };
+      const firstIssue = err.issues[0];
+      return { success: false, error: firstIssue?.message || "Validation failed." };
     }
     return { success: false, error: "An unexpected error occurred." };
   }
@@ -72,48 +73,48 @@ export async function updateStudent(id: string, data: StudentFormValues) {
     // 1. Verify authenticated user and role
     const profile = await requireSchoolAdmin();
     
-    // 2. Validate input
+    // 2. Strict server-side validation using studentSchema
     const validatedData = studentSchema.parse(data);
     
-    // Normalize fields
-    const class_name = (validatedData.class_name || "").replace(/\s+/g, ' ').trim();
-    const section = (validatedData.section || "").replace(/\s+/g, ' ').trim().toUpperCase();
-    const roll_number = (validatedData.roll_number || "").trim();
+    const student_name = validatedData.student_name.trim();
+    const admission_number = validatedData.admission_number.trim();
+    const class_name = validatedData.class_name;
+    const section = validatedData.section.trim();
+    const gender = validatedData.gender;
 
     const supabase = await createClient();
 
-    // 3. Check for duplicates (excluding current student)
-    const { data: existing } = await supabase
+    // 3. Check for duplicates (excluding current student) within the same school
+    const { data: existingAdm } = await supabase
       .from("students")
       .select("id")
       .eq("school_id", profile.school_id)
-      .eq("class_name", class_name)
-      .eq("section", section)
-      .eq("roll_number", roll_number)
+      .eq("admission_number", admission_number)
       .neq("id", id)
       .maybeSingle();
 
-    if (existing) {
-      return { success: false, error: `Roll number ${roll_number} already exists in Class ${class_name} - Section ${section}.` };
+    if (existingAdm) {
+      return { success: false, error: `Admission Number ${admission_number} already exists in this school.` };
     }
-    
+
     // 4. Update student (RLS strictly limits to school_id match)
     const { error } = await supabase
       .from("students")
       .update({
-        ...validatedData,
-        class_name,
-        section,
-        roll_number,
-        date_of_birth: validatedData.date_of_birth || null,
+        student_name: student_name,
+        admission_number: admission_number,
+        class_name: class_name,
+        section: section,
+        gender: gender,
+        is_active: validatedData.is_active,
       })
       .eq("id", id)
       .eq("school_id", profile.school_id); // Double protection with query scoping
 
     if (error) {
       console.error("Error updating student:", error);
-      if (error.code === '23505') {
-         return { success: false, error: `Roll number ${roll_number} already exists in Class ${class_name} - Section ${section}.` };
+      if (error.code === "23505") {
+        return { success: false, error: `A duplicate record was detected during update.` };
       }
       return { success: false, error: "Failed to update student. Please try again." };
     }
@@ -123,7 +124,8 @@ export async function updateStudent(id: string, data: StudentFormValues) {
   } catch (err) {
     console.error("Error in updateStudent:", err);
     if (err instanceof z.ZodError) {
-      return { success: false, error: "Validation failed." };
+      const firstIssue = err.issues[0];
+      return { success: false, error: firstIssue?.message || "Validation failed." };
     }
     return { success: false, error: "An unexpected error occurred." };
   }

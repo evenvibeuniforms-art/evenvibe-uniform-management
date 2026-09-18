@@ -136,3 +136,51 @@ export async function logoutAction() {
   await supabase.auth.signOut();
   redirect("/login");
 }
+
+// ─── Update School Info ────────────────────────────────────────────────────────
+
+import { schoolInfoSchema } from "./schema";
+
+export async function updateSchoolInfo(formData: {
+  address?: string;
+  city?: string;
+  district?: string;
+  pincode?: string;
+  contact_name?: string;
+  contact_phone?: string;
+}) {
+  try {
+    const profile = await requireSchoolAdmin();
+    const supabase = await createClient();
+
+    const parsed = schoolInfoSchema.safeParse(formData);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    }
+
+    const { error } = await supabase
+      .from("schools")
+      .update({
+        address: parsed.data.address || null,
+        city: parsed.data.city || null,
+        district: parsed.data.district || null,
+        pincode: parsed.data.pincode || null,
+        contact_name: parsed.data.contact_name || null,
+        contact_phone: parsed.data.contact_phone || null,
+      })
+      .eq("id", profile.school_id);
+
+    if (error) {
+      console.error("updateSchoolInfo error:", error);
+      return { success: false, error: "Failed to update school information. Please try again." };
+    }
+
+    revalidatePath("/school/settings");
+    revalidatePath("/school", "layout");
+
+    return { success: true };
+  } catch (err) {
+    console.error(err);
+    return { success: false, error: "An unexpected error occurred." };
+  }
+}

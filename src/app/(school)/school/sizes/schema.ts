@@ -3,12 +3,16 @@ import { UNIFORM_TYPES, REGULAR_UNIFORM_SIZES, TSHIRT_UNIFORM_SIZES, PANT_SHORT_
 
 export const sizeCollectionSchema = z.object({
   student_id: z.string().uuid(),
-  uniform_type: z.enum([UNIFORM_TYPES.REGULAR, UNIFORM_TYPES.TSHIRT]),
+  uniform_type: z.enum([UNIFORM_TYPES.REGULAR, UNIFORM_TYPES.TSHIRT]).optional().nullable(),
   shirt_size: z.string().nullable().optional(),
   tshirt_size: z.string().nullable().optional(),
   pant_size: z.string().nullable().optional(),
   short_size: z.string().nullable().optional(),
+  dynamic_sizes: z.record(z.string(), z.string()).optional(),
+  is_dynamic_only: z.boolean().optional(),
 }).superRefine((data, ctx) => {
+  if (data.is_dynamic_only) return; // Skip legacy validation
+
   if (data.uniform_type === UNIFORM_TYPES.REGULAR) {
     if (!data.shirt_size) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Shirt size is required", path: ["shirt_size"] });
@@ -49,6 +53,7 @@ export type StudentSizeRecord = {
   tshirt_size: string | null;
   pant_size: string | null;
   short_size: string | null;
+  dynamic_sizes: Record<string, string>;
   is_complete: boolean;
   created_at: string;
   updated_at: string;
@@ -59,6 +64,7 @@ export type StudentWithSize = {
   student_name: string;
   class_name: string;
   section: string;
-  roll_number: string;
+  admission_number: string;
+  gender: string | null;
   size_record: StudentSizeRecord | null;
 };

@@ -1,34 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, startTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useRealtimeSubscription } from "@/lib/supabase/useRealtime";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Search, Edit2, Trash2, AlertCircle } from "lucide-react";
-import { StudentFormDialog, Student } from "./StudentFormDialog";
+import { MoreHorizontal, Search, Edit2, Trash2 } from "lucide-react";
+import { StudentFormDialog } from "./StudentFormDialog";
 import { deleteStudent } from "@/app/(school)/school/students/actions";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-interface StudentTableProps {
-  students: Student[];
+export interface StudentWithSizeStatus {
+  id: string;
+  student_name: string;
+  admission_number?: string;
+  class_name?: string;
+  section?: string;
+  gender?: string;
+  is_active: boolean;
+  student_uniform_sizes?: { is_complete: boolean } | { is_complete: boolean }[];
 }
 
-export function StudentTable({ students }: StudentTableProps) {
+interface StudentTableProps {
+  students: StudentWithSizeStatus[];
+}
+
+export function StudentTable({ students: initialStudents }: StudentTableProps) {
+  const router = useRouter();
+  const [students, setStudents] = useState<StudentWithSizeStatus[]>(initialStudents);
+
+  useRealtimeSubscription({
+    table: "students",
+    onEvent: (payload) => {
+      if (payload.eventType === "UPDATE" && payload.new) {
+        const updated = payload.new as Record<string, unknown>;
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.id === updated.id
+              ? {
+                  ...s,
+                  student_name: (updated.student_name as string) ?? s.student_name,
+                  admission_number: (updated.admission_number as string) ?? s.admission_number,
+                  class_name: (updated.class_name as string) ?? s.class_name,
+                  section: (updated.section as string) ?? s.section,
+                  gender: (updated.gender as string) ?? s.gender,
+                  is_active: typeof updated.is_active === "boolean" ? updated.is_active : s.is_active,
+                }
+              : s
+          )
+        );
+      }
+      startTransition(() => {
+        router.refresh();
+      });
+    },
+  });
+
   const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState<string>("all");
+  const [sectionFilter, setSectionFilter] = useState<string>("all");
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
+  const [studentToEdit, setStudentToEdit] = useState<StudentWithSizeStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showMissingRoll, setShowMissingRoll] = useState(false);
+  // Extract unique classes and sections for filters
+  const uniqueClasses = useMemo(() => {
+    const classes = new Set<string>();
+    students.forEach(s => {
+      if (s.class_name) classes.add(s.class_name.trim());
+    });
+    return Array.from(classes).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [students]);
 
-  const missingRollCount = students.filter(s => !s.roll_number || s.roll_number.trim() === "").length;
+  const uniqueSections = useMemo(() => {
+    const sections = new Set<string>();
+    students.forEach(s => {
+      // If a class is selected, only show sections for that class
+      if (classFilter !== "all" && s.class_name?.trim() !== classFilter) return;
+      if (s.section) sections.add(s.section.trim());
+    });
+    return Array.from(sections).sort();
+  }, [students, classFilter]);
 
-  // Search filtering on client side (since data is already isolated to this school)
+  // Handle class filter change
+  const handleClassChange = (value: string | null) => {
+    setClassFilter(value || "all");
+    // Reset section filter when class changes if the current section is not in the new class
+    setSectionFilter("all"); 
+  };
+
+  // Search and Filter filtering on client side
   const filteredStudents = students.filter(s => {
     const matchesSearch = (s.student_name?.toLowerCase() || "").includes(search.toLowerCase()) ||
-                          (s.roll_number?.toLowerCase() || "").includes(search.toLowerCase());
-    const matchesFilter = showMissingRoll ? (!s.roll_number || s.roll_number.trim() === "") : true;
-    return matchesSearch && matchesFilter;
+                          (s.admission_number?.toLowerCase() || "").includes(search.toLowerCase()) ||
+                          (s.class_name?.toLowerCase() || "").includes(search.toLowerCase()) ||
+                          (s.section?.toLowerCase() || "").includes(search.toLowerCase());
+    
+    const matchesClass = classFilter === "all" || s.class_name?.trim() === classFilter;
+    const matchesSection = sectionFilter === "all" || s.section?.trim() === sectionFilter;
+
+    return matchesSearch && matchesClass && matchesSection;
   });
 
   const handleDelete = async () => {
@@ -37,6 +111,15 @@ export function StudentTable({ students }: StudentTableProps) {
     await deleteStudent(studentToDelete);
     setIsDeleting(false);
     setStudentToDelete(null);
+  };
+
+
+
+  const getStatusBadge = (isComplete: boolean) => {
+    if (isComplete) {
+      return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Completed</Badge>;
+    }
+    return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pending</Badge>;
   };
 
   if (students.length === 0) {
@@ -55,28 +138,48 @@ export function StudentTable({ students }: StudentTableProps) {
   return (
     <div className="space-y-4">
       {/* Search Header */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between">
-        <div className="relative w-full sm:max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <Input 
-            type="search" 
-            placeholder="Search by name or roll no..." 
-            className="pl-9 bg-white"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="flex flex-col lg:flex-row gap-4 justify-between">
+        
+        {/* Search and Filters */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:max-w-3xl">
+          <div className="relative w-full sm:max-w-[280px]">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Input 
+              type="search" 
+              placeholder="Search students..." 
+              className="pl-9 bg-white"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <Select value={classFilter} onValueChange={handleClassChange}>
+            <SelectTrigger className="w-full sm:w-[160px] bg-white">
+              <SelectValue placeholder="All Classes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Classes</SelectItem>
+              {uniqueClasses.map(c => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={sectionFilter} onValueChange={(val) => setSectionFilter(val || "all")}>
+            <SelectTrigger className="w-full sm:w-[160px] bg-white">
+              <SelectValue placeholder="All Sections" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sections</SelectItem>
+              {uniqueSections.map(s => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
+        {/* Actions */}
         <div className="flex gap-2">
-          {missingRollCount > 0 && (
-            <Button 
-              variant={showMissingRoll ? "default" : "outline"}
-              className={showMissingRoll ? "bg-amber-600 hover:bg-amber-700 text-white" : "text-amber-600 border-amber-200 hover:bg-amber-50"}
-              onClick={() => setShowMissingRoll(!showMissingRoll)}
-            >
-              <AlertCircle className="w-4 h-4 mr-2" />
-              Missing Roll No ({missingRollCount})
-            </Button>
-          )}
           <StudentFormDialog mode="add" />
         </div>
       </div>
@@ -87,46 +190,45 @@ export function StudentTable({ students }: StudentTableProps) {
           <TableHeader className="bg-slate-50">
             <TableRow>
               <TableHead className="font-semibold text-slate-700">Student Name</TableHead>
-              <TableHead className="font-semibold text-slate-700">Roll No</TableHead>
-              <TableHead className="font-semibold text-slate-700">Class & Sec</TableHead>
+              <TableHead className="font-semibold text-slate-700">Adm. Number</TableHead>
+              <TableHead className="font-semibold text-slate-700">Class</TableHead>
+              <TableHead className="font-semibold text-slate-700">Section</TableHead>
               <TableHead className="font-semibold text-slate-700">Gender</TableHead>
-              <TableHead className="font-semibold text-slate-700">Status</TableHead>
+              <TableHead className="font-semibold text-slate-700">Size Status</TableHead>
               <TableHead className="text-right font-semibold text-slate-700">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredStudents.length > 0 ? (
               filteredStudents.map((student) => {
-                const isMissingRoll = !student.roll_number || student.roll_number.trim() === "";
+                // Determine size completion status
+                const sizeRecord = Array.isArray(student.student_uniform_sizes) 
+                  ? student.student_uniform_sizes[0] 
+                  : student.student_uniform_sizes;
+                const isComplete = sizeRecord?.is_complete || false;
+
                 return (
-                <TableRow key={student.id} className={isMissingRoll ? "bg-amber-50/50 hover:bg-amber-50" : ""}>
+                <TableRow key={student.id}>
                   <TableCell className="font-medium text-slate-900">
                     <div className="flex items-center gap-2">
                       {student.student_name}
-                      {isMissingRoll && (
-                        <span title="Missing Roll Number">
-                          <AlertCircle className="h-4 w-4 text-amber-500" />
-                        </span>
+                      {!student.is_active && (
+                        <Badge variant="outline" className="ml-1 bg-slate-50 text-slate-500 border-slate-200 text-[10px] uppercase font-bold py-0 h-4">Inactive</Badge>
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="text-slate-600">
-                    {isMissingRoll ? (
-                      <span className="text-amber-600 font-medium text-xs bg-amber-100 px-2 py-1 rounded-full">Missing</span>
-                    ) : (
-                      student.roll_number
-                    )}
+                    {student.admission_number || "-"}
                   </TableCell>
                   <TableCell className="text-slate-600">
-                    {student.class_name || "-"} {student.section ? `(${student.section})` : ""}
+                    {student.class_name || "-"}
+                  </TableCell>
+                  <TableCell className="text-slate-600">
+                    {student.section || "-"}
                   </TableCell>
                   <TableCell className="text-slate-600">{student.gender || "-"}</TableCell>
                   <TableCell>
-                    {student.is_active ? (
-                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-normal">Active</Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal">Inactive</Badge>
-                    )}
+                    {getStatusBadge(isComplete)}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -135,16 +237,13 @@ export function StudentTable({ students }: StudentTableProps) {
                         <MoreHorizontal className="h-4 w-4" />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-[160px]">
-                        <StudentFormDialog 
-                          mode="edit" 
-                          initialData={student} 
-                          trigger={
-                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="cursor-pointer">
-                              <Edit2 className="mr-2 h-4 w-4 text-slate-500" />
-                              <span>Edit</span>
-                            </DropdownMenuItem>
-                          } 
-                        />
+                        <DropdownMenuItem 
+                          onClick={() => setStudentToEdit(student)} 
+                          className="cursor-pointer"
+                        >
+                          <Edit2 className="mr-2 h-4 w-4 text-slate-500" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setStudentToDelete(student.id)} className="text-red-600 cursor-pointer">
                           <Trash2 className="mr-2 h-4 w-4" />
                           <span>Delete</span>
@@ -156,8 +255,8 @@ export function StudentTable({ students }: StudentTableProps) {
               )})
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
-                  No students found matching your search.
+                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                  No students found matching your filters.
                 </TableCell>
               </TableRow>
             )}
@@ -184,6 +283,26 @@ export function StudentTable({ students }: StudentTableProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Student Dialog */}
+      {studentToEdit && (
+        <StudentFormDialog
+          mode="edit"
+          initialData={{
+            id: studentToEdit.id,
+            student_name: studentToEdit.student_name,
+            admission_number: studentToEdit.admission_number,
+            class_name: studentToEdit.class_name,
+            section: studentToEdit.section,
+            gender: studentToEdit.gender,
+            is_active: studentToEdit.is_active,
+          }}
+          open={!!studentToEdit}
+          onOpenChange={(open) => {
+            if (!open) setStudentToEdit(null);
+          }}
+        />
+      )}
 
     </div>
   );

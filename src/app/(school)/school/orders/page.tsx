@@ -1,45 +1,39 @@
-import { getOrderDetails } from "./actions";
-import { OrderTracking } from "@/components/school/OrderTracking";
-import { AlertCircle, PackageSearch } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { getOrdersList } from "./actions";
+import { SchoolOrdersListView } from "./SchoolOrdersListView";
+import { AlertCircle } from "lucide-react";
 
 export const metadata = {
-  title: "Order Status | EvenVibe School Admin",
+  title: "Orders | EvenVibe School Admin",
 };
 
-export default async function OrdersPage() {
-  const { order, error } = await getOrderDetails();
+export default async function OrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  const page = typeof params.page === "string" ? parseInt(params.page, 10) : 1;
+  const search = typeof params.search === "string" ? params.search : undefined;
+  const status = typeof params.status === "string" ? params.status : undefined;
+  const dateSort = params.dateSort === "asc" ? "asc" : "desc";
 
-  if (error) {
+  const { orders, pagination, error } = await getOrdersList({
+    page,
+    limit: 10,
+    search,
+    status,
+    dateSort,
+  });
+
+  if (error || !orders || !pagination) {
     return (
       <div className="p-12 text-center text-red-500 max-w-lg mx-auto bg-red-50 rounded-xl mt-8">
         <AlertCircle className="mx-auto h-12 w-12 mb-4" />
         <h2 className="text-xl font-bold mb-2">Error</h2>
-        <p>{error}</p>
+        <p>{error || "Failed to load orders"}</p>
       </div>
     );
   }
 
-  if (!order) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl border border-slate-200 shadow-sm text-center max-w-2xl mx-auto mt-8">
-        <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-6">
-          <PackageSearch className="h-8 w-8" />
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">No active order yet</h2>
-        <p className="text-slate-500 mb-6 max-w-md">
-          Your submitted requirement is waiting to be processed into an order. 
-          If you haven&apos;t submitted your requirement yet, please complete size collection first.
-        </p>
-        <div className="flex gap-4">
-          <Link href="/school/requirements">
-            <Button className="bg-emerald-600 hover:bg-emerald-700">Go to Requirements</Button>
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return <OrderTracking order={order} />;
+  return <SchoolOrdersListView orders={orders} pagination={pagination} />;
 }

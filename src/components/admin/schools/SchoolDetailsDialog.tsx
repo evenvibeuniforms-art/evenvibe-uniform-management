@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { School, User, MapPin, Phone, Mail, Calendar, Loader2 } from "lucide-react";
 import { approveSchool, rejectSchool } from "@/app/(admin)/admin/schools/actions";
+import { getAdminSchoolLogo, SchoolLogoResult } from "@/lib/actions/school-logo";
+import { getAdminUniformDesign, ActiveUniformDesignResult } from "@/lib/actions/uniform-designs";
+import { AdminSchoolLogoCard } from "./AdminSchoolLogoCard";
+import { AdminUniformDesignCard } from "./AdminUniformDesignCard";
+import Link from "next/link";
 
 interface SchoolDetails {
   id: string;
@@ -41,6 +46,42 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [logoState, setLogoState] = useState<{ schoolId: string | null; result: SchoolLogoResult | null }>({
+    schoolId: null,
+    result: null,
+  });
+  const [designState, setDesignState] = useState<{ schoolId: string | null; result: ActiveUniformDesignResult | null }>({
+    schoolId: null,
+    result: null,
+  });
+
+  const isLoadingAssets = open && !!school?.id && (logoState.schoolId !== school.id || designState.schoolId !== school.id);
+  const logoData = school?.id && logoState.schoolId === school.id ? logoState.result : null;
+  const designData = school?.id && designState.schoolId === school.id ? designState.result : null;
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (!open || !school?.id) return;
+
+    const currentSchoolId = school.id;
+    Promise.all([
+      getAdminSchoolLogo(currentSchoolId),
+      getAdminUniformDesign(currentSchoolId),
+    ])
+      .then(([logoRes, designRes]) => {
+        if (!isCancelled) {
+          setLogoState({ schoolId: currentSchoolId, result: logoRes });
+          setDesignState({ schoolId: currentSchoolId, result: designRes });
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load school assets for admin:", err);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [open, school?.id]);
 
   if (!school) return null;
 
@@ -83,7 +124,7 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
         setTimeout(() => { setError(null); setSuccess(null); }, 300);
       }
     }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between pr-6">
             <DialogTitle className="text-2xl flex items-center gap-2">
@@ -111,7 +152,7 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6 py-4">
+        <div className="grid md:grid-cols-2 gap-6 py-2">
           <div className="space-y-4">
             <div>
               <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-2">
@@ -169,6 +210,30 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
           </div>
         </div>
 
+        {/* School Assets Section: School Uniform Logo & Uniform Design */}
+        <div className="border-t border-slate-200 pt-4 pb-2">
+          {isLoadingAssets ? (
+            <div className="w-full h-36 rounded-lg border border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-slate-400">
+              <Loader2 className="h-5 w-5 animate-spin mb-2" />
+              <p className="text-xs">Loading school assets...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <AdminSchoolLogoCard
+                schoolName={school.name}
+                logo={logoData?.logo || null}
+                signedUrl={logoData?.signedUrl || null}
+              />
+              <AdminUniformDesignCard
+                schoolId={school.id}
+                schoolName={school.name}
+                initialDesign={designData?.design || null}
+                initialSignedUrl={designData?.signedUrl || null}
+              />
+            </div>
+          )}
+        </div>
+
         <DialogFooter className="gap-2 sm:gap-0">
           {!school.is_active ? (
             <>
@@ -190,9 +255,21 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
               </Button>
             </>
           ) : (
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+              <Link href={`/admin/schools/${school.id}`}>
+                <Button variant="outline">
+                  View Page
+                </Button>
+              </Link>
+              <Link href={`/admin/schools/${school.id}/uniforms`} passHref>
+                <Button className="bg-slate-900 text-white hover:bg-slate-800">
+                  Configure Uniforms
+                </Button>
+              </Link>
+            </>
           )}
         </DialogFooter>
       </DialogContent>

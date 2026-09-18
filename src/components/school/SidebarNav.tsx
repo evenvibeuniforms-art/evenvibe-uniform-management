@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, Ruler, ClipboardList, Package, FileSpreadsheet, Scissors, BarChart3, Settings } from "lucide-react";
+import { LayoutDashboard, Users, UserMinus, Ruler, ClipboardList, Package, FileSpreadsheet, Scissors, BarChart3, Settings } from "lucide-react";
 
 type NavItem = {
   name: string;
@@ -16,6 +16,7 @@ type NavItem = {
 const navigation: NavItem[] = [
   { name: "Dashboard", href: "/school", icon: LayoutDashboard, active: true },
   { name: "Students", href: "/school/students", icon: Users },
+  { name: "TC Students", href: "/school/tc-students", icon: UserMinus },
   { name: "Import Excel", href: "/school/import", icon: FileSpreadsheet },
   { name: "Size Management", href: "/school/sizes", icon: Ruler },
   { name: "Requirements", href: "/school/requirements", icon: ClipboardList },

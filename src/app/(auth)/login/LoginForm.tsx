@@ -21,10 +21,15 @@ export default function LoginForm() {
       const response = await login(formData)
       if (response?.error) {
         setError(response.error)
+        setIsLoading(false)
       }
-    } catch {
+    } catch (error) {
+      const err = error as Error & { digest?: string };
+      // Re-throw Next.js redirect exceptions so the router can process the navigation
+      if (err?.message === 'NEXT_REDIRECT' || err?.digest?.startsWith('NEXT_REDIRECT')) {
+        throw err
+      }
       setError('Unable to sign in right now. Please try again.')
-    } finally {
       setIsLoading(false)
     }
   }

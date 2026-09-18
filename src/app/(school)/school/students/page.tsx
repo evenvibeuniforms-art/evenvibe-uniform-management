@@ -11,7 +11,7 @@ export default async function StudentsPage() {
   // Securely fetch students for the authenticated school admin
   const { data: students, error } = await supabase
     .from("students")
-    .select("*")
+    .select("id, student_name, admission_number, class_name, section, gender, is_active, created_at, student_uniform_sizes (is_complete)")
     .eq("school_id", profile.school_id)
     .order("created_at", { ascending: false });
 

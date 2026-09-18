@@ -10,9 +10,6 @@ import {
   Lock,
   LogOut,
   Building2,
-  MapPin,
-  Phone,
-  Mail,
   Calendar,
   CheckCircle2,
   XCircle,
@@ -40,8 +37,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { profileSchema, passwordSchema, ProfileFormValues, PasswordFormValues } from "./schema";
-import { updateProfile, changePassword, logoutAction } from "./actions";
+import { profileSchema, passwordSchema, schoolInfoSchema, ProfileFormValues, PasswordFormValues, SchoolInfoFormValues } from "./schema";
+import { updateProfile, changePassword, logoutAction, updateSchoolInfo } from "./actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -259,89 +256,191 @@ function PasswordForm() {
   );
 }
 
-// ─── School Info Card ─────────────────────────────────────────────────────────
+// ─── School Info Form ─────────────────────────────────────────────────────────
 
-function SchoolInfoCard({ school }: { school: SchoolData }) {
-  const addressParts = [school.address, school.city, school.district, school.state, school.pincode]
-    .filter(Boolean)
-    .join(", ");
+function SchoolInfoForm({ school }: { school: SchoolData }) {
+  const [isPending, startTransition] = useTransition();
+
+  const form = useForm<SchoolInfoFormValues>({
+    resolver: zodResolver(schoolInfoSchema),
+    defaultValues: {
+      address: school.address || "",
+      city: school.city || "",
+      district: school.district || "",
+      pincode: school.pincode || "",
+      contact_name: school.contact_name || "",
+      contact_phone: school.contact_phone || "",
+    },
+  });
+
+  function onSubmit(values: SchoolInfoFormValues) {
+    startTransition(async () => {
+      const result = await updateSchoolInfo(values);
+      if (result.success) {
+        toast.success("School information updated successfully.");
+      } else {
+        toast.error(result.error ?? "Failed to update school information.");
+      }
+    });
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Status badge */}
-      <div className="flex items-center gap-2">
-        {school.is_active ? (
-          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1.5">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Active
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="text-red-600 border-red-200 gap-1.5">
-            <XCircle className="h-3.5 w-3.5" />
-            Inactive
-          </Badge>
-        )}
-        <span className="text-xs text-slate-500">
-          Registered {formatDate(school.created_at)}
-        </span>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {/* School Name */}
-        <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
-          <Building2 className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-xs text-slate-500 mb-0.5">School Name</p>
-            <p className="text-sm font-medium text-slate-800 break-words">{school.name}</p>
-          </div>
+    <div className="space-y-6">
+      {/* Status & Identity - Read Only */}
+      <div className="space-y-4 pb-4 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          {school.is_active ? (
+            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1.5">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Active
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-red-600 border-red-200 gap-1.5">
+              <XCircle className="h-3.5 w-3.5" />
+              Inactive
+            </Badge>
+          )}
+          <span className="text-xs text-slate-500">
+            Registered {formatDate(school.created_at)}
+          </span>
         </div>
 
-        {/* School Code */}
-        <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
-          <School className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-xs text-slate-500 mb-0.5">School Code</p>
-            <p className="text-sm font-mono font-semibold text-slate-800">{school.school_code}</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">School Name</label>
+            <div className="relative">
+              <Building2 className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                value={school.name}
+                readOnly
+                disabled
+                className="pl-9 bg-slate-50 text-slate-500 cursor-not-allowed"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">School Code</label>
+            <div className="relative">
+              <School className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                value={school.school_code}
+                readOnly
+                disabled
+                className="pl-9 bg-slate-50 text-slate-500 cursor-not-allowed font-mono"
+              />
+            </div>
           </div>
         </div>
-
-        {/* Address */}
-        {addressParts && (
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100 sm:col-span-2">
-            <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs text-slate-500 mb-0.5">Address</p>
-              <p className="text-sm text-slate-700 break-words">{addressParts}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Contact Phone */}
-        {school.contact_phone && (
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
-            <Phone className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs text-slate-500 mb-0.5">Contact Phone</p>
-              <p className="text-sm text-slate-700">{school.contact_phone}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Contact Email */}
-        {school.contact_email && (
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
-            <Mail className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs text-slate-500 mb-0.5">Contact Email</p>
-              <p className="text-sm text-slate-700 break-words">{school.contact_email}</p>
-            </div>
-          </div>
-        )}
+        <p className="text-xs text-slate-500">
+          School identity information is managed by EvenVibe. Contact support to change these details.
+        </p>
       </div>
 
-      <p className="text-xs text-slate-400">
-        School information is managed by EvenVibe. Contact support to update school details.
-      </p>
+      {/* Editable Fields */}
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="contact_name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Contact Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Primary contact name" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="contact_phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Contact Phone</FormLabel>
+                  <FormControl>
+                    <Input placeholder="+91 98765 43210" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <FormField
+            control={form.control}
+            name="address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Street Address</FormLabel>
+                <FormControl>
+                  <Input placeholder="Building, Street, Area" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <FormField
+              control={form.control}
+              name="city"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>City</FormLabel>
+                  <FormControl>
+                    <Input placeholder="City" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="district"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>District</FormLabel>
+                  <FormControl>
+                    <Input placeholder="District" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="pincode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Pincode</FormLabel>
+                  <FormControl>
+                    <Input placeholder="6 digits" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              id="settings-save-school-btn"
+              type="submit"
+              disabled={isPending}
+              className="min-w-[120px]"
+            >
+              {isPending ? "Saving…" : "Save Information"}
+            </Button>
+          </div>
+        </form>
+      </Form>
     </div>
   );
 }
@@ -453,7 +552,7 @@ export function SettingsView({ profile, school }: SettingsViewProps) {
         </CardHeader>
         <Separator />
         <CardContent className="pt-6">
-          <SchoolInfoCard school={school} />
+          <SchoolInfoForm school={school} />
         </CardContent>
       </Card>
 

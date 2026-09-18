@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSchoolAdmin } from "@/lib/auth/server";
+import { requireAdmin, requireSchoolAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { SchoolLogo } from "@/types/database";
 import { revalidatePath } from "next/cache";
@@ -62,6 +62,62 @@ export async function getSchoolLogo(): Promise<SchoolLogoResult> {
     };
   } catch (err) {
     console.error("[getSchoolLogo] Error:", err);
+    return { logo: null, signedUrl: null, error: "An unexpected error occurred." };
+  }
+}
+
+/**
+ * Fetch the school logo for a specific school (EvenVive Admin view)
+ */
+export async function getAdminSchoolLogo(schoolId: string): Promise<SchoolLogoResult> {
+  try {
+    await requireAdmin();
+
+    if (!schoolId) {
+      return { logo: null, signedUrl: null, error: "School identifier is required." };
+    }
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(schoolId)) {
+      return { logo: null, signedUrl: null, error: "Invalid school identifier." };
+    }
+
+    const supabase = await createClient();
+
+    const { data: logo, error: dbError } = await supabase
+      .from("school_logos")
+      .select("*")
+      .eq("school_id", schoolId)
+      .maybeSingle();
+
+    if (dbError) {
+      console.error("[getAdminSchoolLogo] Database error:", dbError.message);
+      return { logo: null, signedUrl: null, error: "Failed to fetch school logo." };
+    }
+
+    if (!logo) {
+      return { logo: null, signedUrl: null };
+    }
+
+    // Generate short-lived presigned URL (10 minutes expiry)
+    let signedUrl: string | null = null;
+    try {
+      const { data, error: storageError } = await supabase.storage
+        .from("school-logos")
+        .createSignedUrl(logo.storage_path, 600);
+
+      if (storageError) throw storageError;
+      signedUrl = data.signedUrl;
+    } catch (storageErr) {
+      console.error("[getAdminSchoolLogo] Supabase Storage Signed URL error:", storageErr);
+    }
+
+    return {
+      logo: logo as SchoolLogo,
+      signedUrl,
+    };
+  } catch (err) {
+    console.error("[getAdminSchoolLogo] Error:", err);
     return { logo: null, signedUrl: null, error: "An unexpected error occurred." };
   }
 }
@@ -155,6 +211,7 @@ export async function uploadSchoolLogo(formData: FormData): Promise<{ success: b
     }
 
     revalidatePath("/school");
+    revalidatePath("/admin/schools");
     return { success: true };
   } catch (err) {
     console.error("[uploadSchoolLogo] Error:", err);
@@ -213,6 +270,7 @@ export async function deleteSchoolLogo(): Promise<{ success: boolean; error?: st
     }
 
     revalidatePath("/school");
+    revalidatePath("/admin/schools");
     return { success: true };
   } catch (err) {
     console.error("[deleteSchoolLogo] Error:", err);
