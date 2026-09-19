@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import AdminPackingDeliveryDetailsView from "../views/AdminPackingDeliveryDetailsView";
 
+
 export const metadata = {
   title: "Packing & Delivery Workspace | EvenVibe Admin",
 };
@@ -60,22 +61,57 @@ export default async function AdminPackingDeliveryDetailsPage({
     notFound();
   }
 
-  // 2. Fetch Historical Requirement Items Snapshot
-  const { data: requirementItems } = await supabase
-    .from("requirement_items")
-    .select("*")
-    .eq("requirement_id", order.requirement_id)
-    .order("class_name", { nullsFirst: true })
-    .order("section_name", { nullsFirst: true })
-    .order("gender", { nullsFirst: true })
-    .order("item_name")
-    .order("size");
-
-  // 3. Fetch Requirement Students to calculate distinct student counts
-  const { data: reqStudents } = await supabase
-    .from("requirement_students")
-    .select("student_id")
-    .eq("requirement_id", order.requirement_id);
+  // 2. Concurrently fetch Requirement Items, Students, QC Record, Packing Record, and Packing History
+  const [
+    { data: requirementItems },
+    { data: reqStudents },
+    { data: qcRecord },
+    { data: packingRecord },
+    { data: packingHistoryRaw },
+  ] = await Promise.all([
+    supabase
+      .from("requirement_items")
+      .select("*")
+      .eq("requirement_id", order.requirement_id)
+      .order("class_name", { nullsFirst: true })
+      .order("section_name", { nullsFirst: true })
+      .order("gender", { nullsFirst: true })
+      .order("item_name")
+      .order("size"),
+    supabase
+      .from("requirement_students")
+      .select("student_id")
+      .eq("requirement_id", order.requirement_id),
+    supabase
+      .from("quality_check_records")
+      .select("id, status, completed_at")
+      .eq("order_id", id)
+      .maybeSingle(),
+    supabase
+      .from("packing_records")
+      .select("*")
+      .eq("order_id", id)
+      .maybeSingle(),
+    supabase
+      .from("packing_history")
+      .select(`
+        id,
+        packing_record_id,
+        order_id,
+        from_status,
+        to_status,
+        note,
+        created_at,
+        changed_by,
+        profiles:changed_by (
+          id,
+          full_name,
+          role
+        )
+      `)
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   const studentIds = (reqStudents || []).map((rs) => rs.student_id);
   const distinctTrackedStudents = new Set(studentIds).size;
@@ -91,7 +127,25 @@ export default async function AdminPackingDeliveryDetailsPage({
   const itemStudentSets = new Map<string, Set<string>>();
 
   if (studentIds.length > 0) {
+    // Fetch in batches of 200 in parallel
     const chunkSize = 200;
+    const chunks: string[][] = [];
+    for (let i = 0; i < studentIds.length; i += chunkSize) {
+      chunks.push(studentIds.slice(i, i + chunkSize));
+    }
+
+    const [chunkResults, { data: configItems }] = await Promise.all([
+      Promise.all(chunks.map(chunk =>
+        supabase
+          .from("student_uniform_sizes")
+          .select("student_id, dynamic_sizes, shirt_size, pant_size, tshirt_size, short_size")
+          .in("student_id", chunk)
+      )),
+      supabase
+        .from("school_uniform_configuration_items")
+        .select("id, item_name"),
+    ]);
+
     const allSizes: {
       student_id: string;
       dynamic_sizes: unknown;
@@ -101,20 +155,11 @@ export default async function AdminPackingDeliveryDetailsPage({
       short_size: string | null;
     }[] = [];
 
-    for (let i = 0; i < studentIds.length; i += chunkSize) {
-      const chunk = studentIds.slice(i, i + chunkSize);
-      const { data: chunkSizes } = await supabase
-        .from("student_uniform_sizes")
-        .select("student_id, dynamic_sizes, shirt_size, pant_size, tshirt_size, short_size")
-        .in("student_id", chunk);
+    chunkResults.forEach(({ data: chunkSizes }) => {
       if (chunkSizes) {
         allSizes.push(...chunkSizes);
       }
-    }
-
-    const { data: configItems } = await supabase
-      .from("school_uniform_configuration_items")
-      .select("id, item_name");
+    });
 
     const configMap = new Map<string, string>();
     (configItems || []).forEach((ci) => {
@@ -186,20 +231,6 @@ export default async function AdminPackingDeliveryDetailsPage({
 
   const dynamicItems = Array.from(itemSummaryMap.values());
 
-  // 4. Fetch Quality Check Record for QC passed timestamp
-  const { data: qcRecord } = await supabase
-    .from("quality_check_records")
-    .select("id, status, completed_at")
-    .eq("order_id", id)
-    .maybeSingle();
-
-  // 5. Fetch Packing Record
-  const { data: packingRecord } = await supabase
-    .from("packing_records")
-    .select("*")
-    .eq("order_id", id)
-    .maybeSingle();
-
   // 6. Fetch Packing Checklist Items if packing record exists
   let checklistItems: {
     id: string;
@@ -220,27 +251,6 @@ export default async function AdminPackingDeliveryDetailsPage({
     checklistItems = checklistData || [];
   }
 
-  // 7. Fetch Packing History
-  const { data: packingHistoryRaw } = await supabase
-    .from("packing_history")
-    .select(`
-      id,
-      packing_record_id,
-      order_id,
-      from_status,
-      to_status,
-      note,
-      created_at,
-      changed_by,
-      profiles:changed_by (
-        id,
-        full_name,
-        role
-      )
-    `)
-    .eq("order_id", id)
-    .order("created_at", { ascending: false });
-
   interface RawPackingHistoryItem {
     id: string;
     from_status: string | null;
@@ -249,9 +259,9 @@ export default async function AdminPackingDeliveryDetailsPage({
     created_at: string;
     changed_by: string;
     profiles:
-      | { id: string; full_name: string | null; role: string }
-      | { id: string; full_name: string | null; role: string }[]
-      | null;
+    | { id: string; full_name: string | null; role: string }
+    | { id: string; full_name: string | null; role: string }[]
+    | null;
   }
 
   const rawHistory = (packingHistoryRaw || []) as unknown as RawPackingHistoryItem[];

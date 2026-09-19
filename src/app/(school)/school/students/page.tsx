@@ -1,6 +1,7 @@
 import { requireSchoolAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { StudentTable } from "@/components/school/StudentTable";
+import { StudentFormDialog } from "@/components/school/StudentFormDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UserCheck, UserX } from "lucide-react";
 
@@ -31,9 +32,12 @@ export default async function StudentsPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Students</h2>
-        <p className="text-slate-500 mt-1">Manage students for your school</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Students</h2>
+          <p className="text-slate-500 mt-1">Manage students for your school</p>
+        </div>
+        <StudentFormDialog mode="add" />
       </div>
 
       {/* Metrics Row */}

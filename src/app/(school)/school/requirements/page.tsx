@@ -15,8 +15,13 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function RequirementSubmissionPage() {
-  const { preview, error } = await getRequirementPreview();
-  const { students, allConfigs: configurations } = await getStudentSizes();
+  const [
+    { preview, error },
+    { students, allConfigs: configurations }
+  ] = await Promise.all([
+    getRequirementPreview(),
+    getStudentSizes(),
+  ]);
 
   if (error || !preview) {
     return (

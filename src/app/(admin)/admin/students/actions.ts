@@ -37,21 +37,25 @@ export async function getAdminSchoolsWithStats() {
   await requireAdmin();
   const supabase = await createClient();
 
-  const { data: schools, error: schoolErr } = await supabase
-    .from("schools")
-    .select("id, name, school_code")
-    .eq("is_active", true)
-    .order("name");
+  const [
+    { data: schools, error: schoolErr },
+    { data: students, error: studentErr }
+  ] = await Promise.all([
+    supabase
+      .from("schools")
+      .select("id, name, school_code")
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("students")
+      .select("school_id, class_name")
+      .eq("is_active", true),
+  ]);
 
   if (schoolErr || !schools) {
     console.error("Supabase error fetching schools:", schoolErr);
     throw new Error(`Failed to fetch schools: ${schoolErr?.message}`);
   }
-
-  const { data: students, error: studentErr } = await supabase
-    .from("students")
-    .select("school_id, class_name")
-    .eq("is_active", true);
 
   if (studentErr) {
     console.error("Supabase error fetching students:", studentErr);
@@ -59,7 +63,7 @@ export async function getAdminSchoolsWithStats() {
   }
 
   return schools.map((school) => {
-    const schoolStudents = students.filter(s => s.school_id === school.id);
+    const schoolStudents = (students || []).filter(s => s.school_id === school.id);
     const classes = new Set(schoolStudents.map(s => s.class_name).filter(Boolean));
     return {
       id: school.id,
@@ -75,21 +79,24 @@ export async function getAdminClassesWithStats(schoolId: string) {
   await requireAdmin();
   const supabase = await createClient();
 
-  const { data: school, error: schoolErr } = await supabase
-    .from("schools")
-    .select("name")
-    .eq("id", schoolId)
-    .eq("is_active", true)
-    .single();
+  const [
+    { data: school, error: schoolErr },
+    { data: students, error: studentErr }
+  ] = await Promise.all([
+    supabase
+      .from("schools")
+      .select("name")
+      .eq("id", schoolId)
+      .eq("is_active", true)
+      .single(),
+    supabase
+      .from("students")
+      .select("class_name")
+      .eq("school_id", schoolId)
+      .eq("is_active", true),
+  ]);
 
   if (schoolErr || !school) throw new Error("School not found or inactive");
-
-  const { data: students, error: studentErr } = await supabase
-    .from("students")
-    .select("class_name")
-    .eq("school_id", schoolId)
-    .eq("is_active", true);
-
   if (studentErr) throw new Error("Failed to fetch students");
 
   const classCounts: Record<string, number> = {};

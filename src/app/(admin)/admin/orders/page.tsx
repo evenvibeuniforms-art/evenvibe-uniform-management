@@ -69,13 +69,17 @@ export default async function AdminOrdersPage({
 
   query = query.range(from, to);
 
-  const { data: ordersData, count, error } = await query;
+  const [
+    { data: ordersData, count, error },
+    { data: schoolsData }
+  ] = await Promise.all([
+    query,
+    supabase.from("schools").select("id, name").order("name"),
+  ]);
   
   if (error) {
     console.error("[AdminOrdersPage] Error fetching orders:", error);
   }
-
-  const { data: schoolsData } = await supabase.from("schools").select("id, name").order("name");
 
   interface AdminOrderRequirementItem {
     quantity: number;

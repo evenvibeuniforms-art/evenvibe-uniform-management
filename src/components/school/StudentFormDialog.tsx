@@ -28,7 +28,8 @@ import {
   studentSchema,
   VALID_GENDERS,
 } from "@/app/(school)/school/students/schema";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { STANDARD_CLASSES } from "@/lib/constants/classes";
 
 export interface Student {
@@ -56,6 +57,7 @@ export function StudentFormDialog({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
 }: StudentFormDialogProps) {
+  const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const isOpen = isControlled ? controlledOpen : internalOpen;
@@ -138,6 +140,7 @@ export function StudentFormDialog({
       if (mode === "add") {
         reset();
       }
+      router.refresh();
     } else {
       setError(result.error || "An error occurred");
     }
@@ -158,11 +161,20 @@ export function StudentFormDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      {trigger && (
-        <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+      {!isControlled ? (
+        <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm gap-2 w-full sm:w-auto cursor-pointer">
+          {trigger || (
+            <>
+              <Plus className="h-4 w-4" />
+              <span>Add Student</span>
+            </>
+          )}
+        </DialogTrigger>
+      ) : trigger ? (
+        <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer">
           {trigger}
         </DialogTrigger>
-      )}
+      ) : null}
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === "add" ? "Add New Student" : "Edit Student"}</DialogTitle>

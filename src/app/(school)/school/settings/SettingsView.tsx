@@ -453,7 +453,14 @@ function LogoutSection({ profile }: { profile: ProfileData }) {
 
   function handleLogout() {
     startTransition(async () => {
-      await logoutAction();
+      try {
+        const result = await logoutAction();
+        if (result && !result.success) {
+          toast.error(result.error || "Failed to sign out. Please try again.");
+        }
+      } catch (err) {
+        console.error("[SettingsView] Error during logout:", err);
+      }
     });
   }
 

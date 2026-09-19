@@ -40,6 +40,7 @@ import {
   Sparkles,
   Factory,
   Truck,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -280,11 +281,16 @@ export default function AdminQualityCheckDetailsView({
   const totalQuantity = qcRecord ? qcRecord.total_quantity : historicalTotalItems;
 
   const isReadyForQC =
-    order.status === "production" &&
-    productionSummary?.stage === "production_completed" &&
-    !qcRecord;
+    (order.status === "production" &&
+      productionSummary?.stage === "production_completed" &&
+      !qcRecord) ||
+    (order.status === "quality_check" && (!qcRecord || qcRecord.status === "pending"));
 
-  const currentQCStatus = qcRecord ? qcRecord.status : isReadyForQC ? "ready_for_qc" : "pending";
+  const currentQCStatus = qcRecord
+    ? qcRecord.status
+    : isReadyForQC
+    ? (order.status === "quality_check" ? "pending" : "ready_for_qc")
+    : "pending";
 
   const checkedQuantity = qcRecord ? qcRecord.checked_quantity : 0;
   const passedQuantity = qcRecord ? qcRecord.passed_quantity : 0;
@@ -303,6 +309,32 @@ export default function AdminQualityCheckDetailsView({
     } else {
       toast.success("Quality Check started successfully!");
       setShowStartDialog(false);
+      setStartRemarks("");
+      setQcRecord((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "in_progress",
+              started_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }
+          : {
+              id: res.qcId || "qc-active",
+              order_id: order.id,
+              status: "in_progress",
+              total_quantity: res.totalQuantity || totalQuantity,
+              checked_quantity: 0,
+              passed_quantity: 0,
+              defective_quantity: 0,
+              remarks: startRemarks || null,
+              started_at: new Date().toISOString(),
+              completed_at: null,
+              checked_by: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }
+      );
+      setOrder((prev) => ({ ...prev, status: "quality_check" }));
       router.refresh();
     }
     setIsStarting(false);
@@ -350,26 +382,59 @@ export default function AdminQualityCheckDetailsView({
       toast.success("Quality check inspection progress saved!");
       setShowProgressDialog(false);
       setProgressNote("");
+      setQcRecord((prev) =>
+        prev
+          ? {
+              ...prev,
+              checked_quantity: editCheckedQty,
+              passed_quantity: editPassedQty,
+              defective_quantity: editDefectiveQty,
+              updated_at: new Date().toISOString(),
+            }
+          : null
+      );
       router.refresh();
     }
     setIsUpdatingProgress(false);
   };
 
   const handleCompleteQC = async () => {
-    if (!qcRecord) return;
+    const currentChecked = editCheckedQty;
+    const currentPassed = editPassedQty;
+    const currentDefective = editDefectiveQty;
 
-    if (qcRecord.checked_quantity !== qcRecord.total_quantity) {
+    if (currentChecked !== totalQuantity) {
       toast.error(
-        `All ${qcRecord.total_quantity} items must be inspected before completion (${qcRecord.checked_quantity} checked)`
+        `All ${totalQuantity} items must be inspected before completion (${currentChecked} checked)`
       );
       return;
     }
 
-    if (qcRecord.passed_quantity + qcRecord.defective_quantity !== qcRecord.checked_quantity) {
+    if (currentPassed + currentDefective !== currentChecked) {
       toast.error(
-        `Passed (${qcRecord.passed_quantity}) + Defective (${qcRecord.defective_quantity}) must equal Checked (${qcRecord.checked_quantity})`
+        `Passed (${currentPassed}) + Defective (${currentDefective}) must equal Checked (${currentChecked})`
       );
       return;
+    }
+
+    // If inputs were changed compared to qcRecord, save progress first
+    if (
+      qcRecord &&
+      (qcRecord.checked_quantity !== currentChecked ||
+        qcRecord.passed_quantity !== currentPassed ||
+        qcRecord.defective_quantity !== currentDefective)
+    ) {
+      const saveRes = await updateQualityCheckProgress(
+        order.id,
+        currentChecked,
+        currentPassed,
+        currentDefective,
+        completionNote
+      );
+      if (saveRes.error) {
+        toast.error(`Failed to save latest progress: ${saveRes.error}`);
+        return;
+      }
     }
 
     setIsCompleting(true);
@@ -380,8 +445,33 @@ export default function AdminQualityCheckDetailsView({
     } else {
       if (res.status === "passed") {
         toast.success("Quality Check PASSED! Order handed off to Packing.");
+        setQcRecord((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "passed",
+                completed_at: new Date().toISOString(),
+                checked_quantity: currentChecked,
+                passed_quantity: currentPassed,
+                defective_quantity: currentDefective,
+              }
+            : null
+        );
+        setOrder((prev) => ({ ...prev, status: "packed" }));
       } else {
         toast.error(`Quality Check FAILED with ${res.defectiveQuantity} defective items.`);
+        setQcRecord((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "failed",
+                completed_at: new Date().toISOString(),
+                checked_quantity: currentChecked,
+                passed_quantity: currentPassed,
+                defective_quantity: currentDefective,
+              }
+            : null
+        );
       }
       setShowCompleteDialog(false);
       setCompletionNote("");
@@ -439,25 +529,27 @@ export default function AdminQualityCheckDetailsView({
 
         {/* Primary Action Buttons */}
         <div className="flex items-center gap-2">
-          {isReadyForQC && (
+          {(isReadyForQC || currentQCStatus === "pending" || currentQCStatus === "ready_for_qc") && (
             <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm font-medium"
               onClick={() => setShowStartDialog(true)}
+              disabled={isStarting}
             >
-              <Play className="h-4 w-4" />
-              Start Quality Check
+              {isStarting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              {isStarting ? "Starting..." : "Start Inspection"}
             </Button>
           )}
 
-          {qcRecord && qcRecord.status === "in_progress" && (
+          {currentQCStatus === "in_progress" && (
             <>
               <Button
                 variant="outline"
                 className="border-slate-300 hover:bg-slate-50 gap-1.5"
                 onClick={() => {
-                  setEditCheckedQty(qcRecord.checked_quantity);
-                  setEditPassedQty(qcRecord.passed_quantity);
-                  setEditDefectiveQty(qcRecord.defective_quantity);
                   setShowProgressDialog(true);
                 }}
               >
@@ -467,10 +559,11 @@ export default function AdminQualityCheckDetailsView({
 
               <Button
                 className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 shadow-sm"
+                disabled={editCheckedQty < totalQuantity || editPassedQty + editDefectiveQty !== editCheckedQty}
                 onClick={() => {
-                  if (qcRecord.checked_quantity < totalQuantity) {
+                  if (editCheckedQty < totalQuantity) {
                     toast.error(
-                      `Please inspect all ${totalQuantity} items before completing QC (${qcRecord.checked_quantity} checked)`
+                      `Please inspect all ${totalQuantity} items before completing QC (${editCheckedQty} checked)`
                     );
                     return;
                   }
@@ -483,7 +576,7 @@ export default function AdminQualityCheckDetailsView({
             </>
           )}
 
-          {["packed", "dispatched", "in_transit", "delivered"].includes(order.status) && (
+          {(order.status === "packed" || currentQCStatus === "passed" || ["dispatched", "in_transit", "delivered"].includes(order.status)) && (
             <Link href={`/admin/packing-delivery/${order.id}`}>
               <Button variant="outline" size="sm" className="border-slate-300 hover:bg-slate-50 gap-1.5 text-teal-800">
                 <Truck className="h-4 w-4 text-teal-600" />
@@ -648,6 +741,300 @@ export default function AdminQualityCheckDetailsView({
               </div>
             </CardContent>
           </Card>
+
+          {/* Action / Processing Section */}
+          {(currentQCStatus === "pending" || currentQCStatus === "ready_for_qc") && (
+            <Card className="border-emerald-200 bg-emerald-50/40 shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+                      <Play className="h-5 w-5 text-emerald-600" />
+                      Start Quality Check Inspection
+                    </CardTitle>
+                    <CardDescription className="text-xs text-slate-600">
+                      Total items to inspect: <strong>{totalQuantity}</strong>. Click Start Inspection to begin recording garment measurements and defect counts.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => setShowStartDialog(true)}
+                    disabled={isStarting}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0 shadow-sm font-semibold"
+                  >
+                    {isStarting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                    {isStarting ? "Starting..." : "Start Inspection"}
+                  </Button>
+                </div>
+              </CardHeader>
+            </Card>
+          )}
+
+          {currentQCStatus === "in_progress" && (
+            <Card className="border-indigo-100 shadow-sm">
+              <CardHeader className="pb-3 bg-slate-50/70 border-b">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+                      <ClipboardCheck className="h-5 w-5 text-indigo-600" />
+                      Inspection Processing
+                    </CardTitle>
+                    <CardDescription className="text-xs text-slate-500 mt-0.5">
+                      Enter and save physical inspection results. Passed + Defective must equal Checked quantity. Total order items: <strong>{totalQuantity}</strong>.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100 font-medium">
+                      Pending: {Math.max(0, totalQuantity - editCheckedQty)} items
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="qc-checked-qty" className="text-xs font-semibold text-slate-700">
+                      Checked Quantity
+                    </Label>
+                    <Input
+                      id="qc-checked-qty"
+                      type="number"
+                      min={0}
+                      max={totalQuantity}
+                      value={editCheckedQty}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setEditCheckedQty(isNaN(val) ? 0 : val);
+                      }}
+                      className="text-sm font-semibold"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Total items inspected so far (0 - {totalQuantity})
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="qc-passed-qty" className="text-xs font-semibold text-emerald-700">
+                      Passed Quantity
+                    </Label>
+                    <Input
+                      id="qc-passed-qty"
+                      type="number"
+                      min={0}
+                      max={totalQuantity}
+                      value={editPassedQty}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setEditPassedQty(isNaN(val) ? 0 : val);
+                      }}
+                      className="text-sm font-semibold text-emerald-800"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Approved garments with no defects
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="qc-defective-qty" className="text-xs font-semibold text-rose-700">
+                      Defective Quantity
+                    </Label>
+                    <Input
+                      id="qc-defective-qty"
+                      type="number"
+                      min={0}
+                      max={totalQuantity}
+                      value={editDefectiveQty}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setEditDefectiveQty(isNaN(val) ? 0 : val);
+                      }}
+                      className="text-sm font-semibold text-rose-800"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Faulty garments needing alteration/rework
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="qc-progress-note" className="text-xs text-slate-600">
+                    Inspection Note (optional)
+                  </Label>
+                  <Input
+                    id="qc-progress-note"
+                    placeholder="e.g., Inspected batch 1; fabric check passed, checking buttons..."
+                    value={progressNote}
+                    onChange={(e) => setProgressNote(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+
+                {/* Inline Validation & Guidance */}
+                {(() => {
+                  if (editCheckedQty < 0 || editPassedQty < 0 || editDefectiveQty < 0) {
+                    return (
+                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-700 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        Quantities cannot be negative numbers.
+                      </div>
+                    );
+                  }
+                  if (editCheckedQty > totalQuantity) {
+                    return (
+                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-700 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        Checked quantity ({editCheckedQty}) cannot exceed total order quantity ({totalQuantity}).
+                      </div>
+                    );
+                  }
+                  if (editPassedQty + editDefectiveQty !== editCheckedQty) {
+                    return (
+                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-700 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        Passed ({editPassedQty}) + Defective ({editDefectiveQty}) must equal Checked quantity ({editCheckedQty}). Difference: {Math.abs(editCheckedQty - (editPassedQty + editDefectiveQty))}.
+                      </div>
+                    );
+                  }
+                  if (editCheckedQty < totalQuantity) {
+                    return (
+                      <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-700 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        Inspection valid for {editCheckedQty} of {totalQuantity} items. Click &quot;Save Progress&quot; to update, or inspect all items to complete Quality Check.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                      All {totalQuantity} items inspected! {editDefectiveQty === 0 ? "Zero defects — order will advance to Packed." : `${editDefectiveQty} defective items detected — order will remain in Quality Check.`}
+                    </div>
+                  );
+                })()}
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleUpdateProgress}
+                    disabled={
+                      isUpdatingProgress ||
+                      editPassedQty + editDefectiveQty !== editCheckedQty ||
+                      editCheckedQty < 0 ||
+                      editCheckedQty > totalQuantity
+                    }
+                    className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 gap-2 h-9 text-xs font-semibold"
+                  >
+                    {isUpdatingProgress ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Edit3 className="h-3.5 w-3.5" />
+                    )}
+                    {isUpdatingProgress ? "Saving Progress..." : "Save Progress"}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (editCheckedQty !== totalQuantity) {
+                        toast.error(`All ${totalQuantity} items must be inspected before completion (${editCheckedQty} checked).`);
+                        return;
+                      }
+                      if (editPassedQty + editDefectiveQty !== editCheckedQty) {
+                        toast.error("Passed and defective quantities must equal checked quantity.");
+                        return;
+                      }
+                      setShowCompleteDialog(true);
+                    }}
+                    disabled={
+                      isCompleting ||
+                      editCheckedQty !== totalQuantity ||
+                      editPassedQty + editDefectiveQty !== editCheckedQty
+                    }
+                    className={
+                      editDefectiveQty === 0
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-9 text-xs font-semibold shadow-sm"
+                        : "bg-rose-600 hover:bg-rose-700 text-white gap-2 h-9 text-xs font-semibold shadow-sm"
+                    }
+                  >
+                    {isCompleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    {isCompleting
+                      ? "Completing QC..."
+                      : editCheckedQty === totalQuantity
+                      ? editDefectiveQty === 0
+                        ? "Complete Quality Check (Pass)"
+                        : "Complete Quality Check (Fail)"
+                      : `Complete Quality Check (${editCheckedQty}/${totalQuantity} checked)`}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentQCStatus === "passed" && (
+            <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm">
+              <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-emerald-900">
+                      Quality Check Completed & Passed
+                    </h4>
+                    <p className="text-xs text-emerald-700 mt-0.5">
+                      All {totalQuantity} items inspected and approved with zero defects. Completed at {formatDate(qcRecord?.completed_at || null, true)}.
+                    </p>
+                  </div>
+                </div>
+                <Link href={`/admin/packing-delivery/${order.id}`}>
+                  <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5 h-8 text-xs font-medium">
+                    <Truck className="h-3.5 w-3.5" />
+                    View Packing & Delivery
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentQCStatus === "failed" && (
+            <Card className="border-rose-200 bg-rose-50/50 shadow-sm">
+              <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                    <AlertCircle className="h-5 w-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-rose-900">
+                      Quality Check Inspection Failed
+                    </h4>
+                    <p className="text-xs text-rose-700 mt-0.5">
+                      {defectiveQuantity} of {totalQuantity} items failed inspection. Order remains in Quality Check for administrative review and rework resolution.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEditRemarks(qcRecord?.remarks || "");
+                    setShowRemarksDialog(true);
+                  }}
+                  className="border-rose-300 text-rose-800 hover:bg-rose-100 gap-1.5 h-8 text-xs font-medium"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Update QC Notes
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Grid Layout: Left Side (Order Info & Remarks) + Right Side (Historical Overview) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

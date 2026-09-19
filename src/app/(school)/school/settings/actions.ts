@@ -1,9 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireSchoolAdmin } from "@/lib/auth/server";
+import { requireSchoolAdmin, getCurrentUser } from "@/lib/auth/server";
 import { profileSchema, passwordSchema } from "./schema";
 
 // ─── Load Profile & School Info ───────────────────────────────────────────────
@@ -13,34 +12,34 @@ export async function getProfileAndSchool() {
     const profile = await requireSchoolAdmin();
     const supabase = await createClient();
 
-    // Fetch full profile row
-    const { data: profileData, error: profileErr } = await supabase
-      .from("profiles")
-      .select("id, full_name, phone, role, school_id, created_at")
-      .eq("id", profile.id)
-      .single();
+    // Fetch full profile, school, and user concurrently
+    const [
+      { data: profileData, error: profileErr },
+      { data: schoolData, error: schoolErr },
+      user
+    ] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, full_name, phone, role, school_id, created_at")
+        .eq("id", profile.id)
+        .single(),
+      supabase
+        .from("schools")
+        .select(
+          "id, name, school_code, address, city, district, state, pincode, contact_name, contact_email, contact_phone, is_active, created_at"
+        )
+        .eq("id", profile.school_id!)
+        .single(),
+      getCurrentUser(),
+    ]);
 
     if (profileErr || !profileData) {
       return { success: false, error: "Failed to load profile." };
     }
 
-    // Fetch school row
-    const { data: schoolData, error: schoolErr } = await supabase
-      .from("schools")
-      .select(
-        "id, name, school_code, address, city, district, state, pincode, contact_name, contact_email, contact_phone, is_active, created_at"
-      )
-      .eq("id", profileData.school_id!)
-      .single();
-
     if (schoolErr || !schoolData) {
       return { success: false, error: "Failed to load school information." };
     }
-
-    // Fetch auth email (server-side safe)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
 
     return {
       success: true,
@@ -129,12 +128,10 @@ export async function changePassword(formData: {
   }
 }
 
-// ─── Logout ───────────────────────────────────────────────────────────────────
+import { signOutAction } from "@/lib/auth/actions";
 
 export async function logoutAction() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  redirect("/login");
+  return signOutAction();
 }
 
 // ─── Update School Info ────────────────────────────────────────────────────────

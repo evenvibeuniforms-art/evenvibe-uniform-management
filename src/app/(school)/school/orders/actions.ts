@@ -212,30 +212,31 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
 
     const requirement = Array.isArray(data.requirements) ? data.requirements[0] : data.requirements;
 
-    // Get completed sizes from requirement_students
-    const { count: trackedCount } = await supabase
-      .from('requirement_students')
-      .select('*', { count: 'exact', head: true })
-      .eq('requirement_id', requirement.id);
+    // Concurrently fetch completed sizes and eligible students
+    const needsEligible = data.status === 'submitted' || data.status === 'under_review';
+    
+    const [trackedResult, eligibleResult] = await Promise.all([
+      supabase
+        .from('requirement_students')
+        .select('*', { count: 'exact', head: true })
+        .eq('requirement_id', requirement.id),
+      needsEligible
+        ? supabase.rpc('get_eligible_students_for_order', { p_order_id: data.id })
+        : Promise.resolve({ data: null, error: null })
+    ]);
 
-    const completedSizes = trackedCount || 0;
+    const completedSizes = trackedResult.count || 0;
     const pendingCount = Math.max(0, requirement.total_students - completedSizes);
 
     const isLegacy = false;
     const trackingMode: 'legacy' | 'tracked' = 'tracked';
 
-    // Fetch eligible students who can be added to this order
     let canAddStudents = false;
     let eligibleStudents: EligibleStudent[] = [];
 
-    if (data.status === 'submitted' || data.status === 'under_review') {
-      const { data: eligibleData, error: eligibleErr } = await supabase.rpc('get_eligible_students_for_order', {
-        p_order_id: data.id
-      });
-      if (!eligibleErr && eligibleData) {
-        canAddStudents = eligibleData.can_add ?? false;
-        eligibleStudents = (eligibleData.students || []) as EligibleStudent[];
-      }
+    if (needsEligible && !eligibleResult.error && eligibleResult.data) {
+      canAddStudents = eligibleResult.data.can_add ?? false;
+      eligibleStudents = (eligibleResult.data.students || []) as EligibleStudent[];
     }
 
     const orderDetails: OrderDetails = {

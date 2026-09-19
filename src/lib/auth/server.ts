@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { AppRole } from "@/types/database";
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async () => {
   const supabase = await createClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   
@@ -11,9 +12,9 @@ export async function getCurrentUser() {
   }
   
   return user;
-}
+});
 
-export async function getCurrentProfile() {
+export const getCurrentProfile = cache(async () => {
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -27,7 +28,7 @@ export async function getCurrentProfile() {
   if (error || !profile) return null;
 
   return profile;
-}
+});
 
 export async function requireAuth() {
   const user = await getCurrentUser();

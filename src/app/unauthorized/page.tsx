@@ -1,8 +1,7 @@
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
-import { logout } from "@/app/(auth)/login/actions";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 
 export default function UnauthorizedPage() {
   return (
@@ -20,11 +19,7 @@ export default function UnauthorizedPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center space-y-4">
-          <form action={logout} className="w-full">
-            <Button type="submit" variant="default" className="w-full">
-              Sign Out
-            </Button>
-          </form>
+          <SignOutButton className="w-full justify-center bg-emerald-700 hover:bg-emerald-800 text-white" />
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-900">
             Return to Home
           </Link>

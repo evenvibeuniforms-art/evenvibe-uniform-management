@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -11,13 +12,14 @@ import {
   DropdownMenuItem,
   DropdownMenuGroup,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Menu, User, LayoutDashboard, School, Users, ShoppingCart, BarChart, Factory, Settings } from "lucide-react";
+import { Menu, User, LayoutDashboard, School, Users, ShoppingCart, BarChart, Factory, Settings, LogOut, Loader2 } from "lucide-react";
+import { signOutAction } from "@/lib/auth/actions";
+import { toast } from "sonner";
 
 interface AdminHeaderProps {
-  onLogout: () => void;
+  onLogout?: () => void;
   email?: string;
 }
 
@@ -33,6 +35,29 @@ const navigation = [
 
 export function AdminHeader({ onLogout, email }: AdminHeaderProps) {
   const pathname = usePathname();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    if (onLogout) {
+      try {
+        await onLogout();
+      } catch (err) {
+        console.error("[AdminHeader] onLogout callback error:", err);
+      }
+    }
+    try {
+      const result = await signOutAction();
+      if (result && !result.success) {
+        toast.error(result.error || "Failed to sign out. Please try again.");
+        setIsLoggingOut(false);
+      }
+    } catch (err) {
+      console.error("[AdminHeader] Error during sign out:", err);
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <header className="flex h-14 items-center gap-4 border-b bg-slate-50 px-4 lg:h-[60px] lg:px-6">
@@ -54,7 +79,7 @@ export function AdminHeader({ onLogout, email }: AdminHeaderProps) {
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              
+
               return (
                 <Link
                   key={item.name}
@@ -98,12 +123,29 @@ export function AdminHeader({ onLogout, email }: AdminHeaderProps) {
               </DropdownMenuLabel>
             )}
           </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onLogout} className="text-red-600 focus:text-red-600 font-medium cursor-pointer">
-            Logout
+          <DropdownMenuItem
+            disabled={isLoggingOut}
+            onClick={(e) => {
+              e.preventDefault();
+              handleLogout();
+            }}
+            className="text-red-600 focus:text-red-600 font-medium cursor-pointer"
+          >
+            {isLoggingOut ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <span>Signing out...</span>
+              </>
+            ) : (
+              <>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Sign Out</span>
+              </>
+            )}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
   );
 }
+

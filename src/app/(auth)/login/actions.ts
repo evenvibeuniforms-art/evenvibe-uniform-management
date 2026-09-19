@@ -113,16 +113,8 @@ export async function login(formData: FormData) {
   redirect('/school');
 }
 
+import { signOutAction } from "@/lib/auth/actions";
+
 export async function logout() {
-  const supabase = await createClient()
-  
-  const { error } = await supabase.auth.signOut()
-
-  if (error) {
-    console.error('Logout error:', error.message)
-    // Could not sign out, but we'll redirect anyway for this test page
-  }
-
-  revalidatePath('/', 'layout')
-  redirect('/login')
+  return signOutAction();
 }

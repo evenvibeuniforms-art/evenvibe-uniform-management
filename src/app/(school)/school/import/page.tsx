@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-
-import * as XLSX from "xlsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Download, Upload, AlertCircle, CheckCircle2, ArrowRight, FileType, Trash2, Info } from "lucide-react";
@@ -28,7 +26,8 @@ export default function ImportStudentsPage() {
     error?: string;
   } | null>(null);
 
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
+    const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet([
       ["Student Name", "Admission Number", "Class", "Section", "Gender"],
       ["Aarav Sharma", "ADM001", "Class 1", "A", "Male"],
@@ -82,6 +81,7 @@ export default function ImportStudentsPage() {
   const parseFile = async (selectedFile: File) => {
     setIsParsing(true);
     try {
+      const XLSX = await import("xlsx");
       const data = await selectedFile.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];

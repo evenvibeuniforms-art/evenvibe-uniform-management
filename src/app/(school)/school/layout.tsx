@@ -5,9 +5,7 @@ import { MobileSidebar } from "@/components/school/MobileSidebar";
 import { UserMenu } from "@/components/school/UserMenu";
 import { SchoolNotificationBell } from "@/components/school/SchoolNotificationBell";
 import { getSchoolNotifications } from "@/app/(admin)/admin/notifications/actions";
-import { LogOut } from "lucide-react";
-import { logout } from "@/app/(auth)/login/actions";
-import { Button } from "@/components/ui/button";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 
 export default async function SchoolLayout({
   children,
@@ -48,12 +46,7 @@ export default async function SchoolLayout({
               </p>
             </div>
           </div>
-          <form action={logout}>
-            <Button variant="outline" className="w-full justify-start text-slate-600" size="sm">
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
-            </Button>
-          </form>
+          <SignOutButton className="w-full text-slate-600" />
         </div>
       </aside>
 

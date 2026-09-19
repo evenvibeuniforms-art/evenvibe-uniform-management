@@ -57,22 +57,57 @@ export default async function AdminQualityCheckDetailsPage({
     notFound();
   }
 
-  // 2. Fetch Historical Requirement Items Snapshot
-  const { data: requirementItems } = await supabase
-    .from("requirement_items")
-    .select("*")
-    .eq("requirement_id", order.requirement_id)
-    .order("class_name", { nullsFirst: true })
-    .order("section_name", { nullsFirst: true })
-    .order("gender", { nullsFirst: true })
-    .order("item_name")
-    .order("size");
-
-  // 3. Fetch Authoritative Requirement Students to calculate distinct student counts
-  const { data: reqStudents } = await supabase
-    .from("requirement_students")
-    .select("student_id")
-    .eq("requirement_id", order.requirement_id);
+  // 2. Concurrently fetch Requirement Items, Students, QC Record, QC History, and Production Record
+  const [
+    { data: requirementItems },
+    { data: reqStudents },
+    { data: qcRecord },
+    { data: qcHistoryRaw },
+    { data: productionRecord },
+  ] = await Promise.all([
+    supabase
+      .from("requirement_items")
+      .select("*")
+      .eq("requirement_id", order.requirement_id)
+      .order("class_name", { nullsFirst: true })
+      .order("section_name", { nullsFirst: true })
+      .order("gender", { nullsFirst: true })
+      .order("item_name")
+      .order("size"),
+    supabase
+      .from("requirement_students")
+      .select("student_id")
+      .eq("requirement_id", order.requirement_id),
+    supabase
+      .from("quality_check_records")
+      .select("*")
+      .eq("order_id", id)
+      .maybeSingle(),
+    supabase
+      .from("quality_check_history")
+      .select(`
+        id,
+        quality_check_id,
+        order_id,
+        from_status,
+        to_status,
+        note,
+        created_at,
+        changed_by,
+        profiles:changed_by (
+          id,
+          full_name,
+          role
+        )
+      `)
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("production_records")
+      .select("stage, completed_at, updated_at")
+      .eq("order_id", id)
+      .maybeSingle(),
+  ]);
 
   const studentIds = (reqStudents || []).map((rs) => rs.student_id);
   const distinctTrackedStudents = new Set(studentIds).size;
@@ -88,8 +123,25 @@ export default async function AdminQualityCheckDetailsPage({
   const itemStudentSets = new Map<string, Set<string>>();
 
   if (studentIds.length > 0) {
-    // Fetch in batches of 200
+    // Fetch in batches of 200 in parallel
     const chunkSize = 200;
+    const chunks: string[][] = [];
+    for (let i = 0; i < studentIds.length; i += chunkSize) {
+      chunks.push(studentIds.slice(i, i + chunkSize));
+    }
+
+    const [chunkResults, { data: configItems }] = await Promise.all([
+      Promise.all(chunks.map(chunk =>
+        supabase
+          .from("student_uniform_sizes")
+          .select("student_id, dynamic_sizes, shirt_size, pant_size, tshirt_size, short_size")
+          .in("student_id", chunk)
+      )),
+      supabase
+        .from("school_uniform_configuration_items")
+        .select("id, item_name"),
+    ]);
+
     const allSizes: {
       student_id: string;
       dynamic_sizes: unknown;
@@ -99,20 +151,11 @@ export default async function AdminQualityCheckDetailsPage({
       short_size: string | null;
     }[] = [];
 
-    for (let i = 0; i < studentIds.length; i += chunkSize) {
-      const chunk = studentIds.slice(i, i + chunkSize);
-      const { data: chunkSizes } = await supabase
-        .from("student_uniform_sizes")
-        .select("student_id, dynamic_sizes, shirt_size, pant_size, tshirt_size, short_size")
-        .in("student_id", chunk);
+    chunkResults.forEach(({ data: chunkSizes }) => {
       if (chunkSizes) {
         allSizes.push(...chunkSizes);
       }
-    }
-
-    const { data: configItems } = await supabase
-      .from("school_uniform_configuration_items")
-      .select("id, item_name");
+    });
 
     const configMap = new Map<string, string>();
     (configItems || []).forEach((ci) => {
@@ -184,35 +227,7 @@ export default async function AdminQualityCheckDetailsPage({
 
   const dynamicItems = Array.from(itemSummaryMap.values());
 
-  // 4. Fetch Quality Check Record
-  const { data: qcRecord } = await supabase
-    .from("quality_check_records")
-    .select("*")
-    .eq("order_id", id)
-    .maybeSingle();
-
-  // 5. Fetch Quality Check History
-  const { data: qcHistoryRaw } = await supabase
-    .from("quality_check_history")
-    .select(`
-      id,
-      quality_check_id,
-      order_id,
-      from_status,
-      to_status,
-      note,
-      created_at,
-      changed_by,
-      profiles:changed_by (
-        id,
-        full_name,
-        role
-      )
-    `)
-    .eq("order_id", id)
-    .order("created_at", { ascending: false });
-
-  interface RawHistoryItem {
+  const rawHistory = (qcHistoryRaw || []) as unknown as {
     id: string;
     from_status: string | null;
     to_status: string;
@@ -223,20 +238,12 @@ export default async function AdminQualityCheckDetailsPage({
       | { id: string; full_name: string | null; role: string }
       | { id: string; full_name: string | null; role: string }[]
       | null;
-  }
+  }[];
 
-  const rawHistory = (qcHistoryRaw || []) as unknown as RawHistoryItem[];
   const formattedQCHistory = rawHistory.map((item) => ({
     ...item,
     profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles,
   }));
-
-  // 6. Fetch Production Record for summary
-  const { data: productionRecord } = await supabase
-    .from("production_records")
-    .select("stage, completed_at, updated_at")
-    .eq("order_id", id)
-    .maybeSingle();
 
   const formattedOrder = {
     ...order,

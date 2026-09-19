@@ -60,22 +60,57 @@ export default async function AdminProductionDetailsPage({
     notFound();
   }
 
-  // 2. Fetch Historical Requirement Items
-  const { data: requirementItems } = await supabase
-    .from("requirement_items")
-    .select("*")
-    .eq("requirement_id", order.requirement_id)
-    .order("class_name", { nullsFirst: true })
-    .order("section_name", { nullsFirst: true })
-    .order("gender", { nullsFirst: true })
-    .order("item_name")
-    .order("size");
-
-  // 2b. Fetch Authoritative Requirement Students to calculate distinct student counts
-  const { data: reqStudents } = await supabase
-    .from("requirement_students")
-    .select("student_id")
-    .eq("requirement_id", order.requirement_id);
+  // 2. Concurrently fetch Requirement Items, Students, Production Record, Stage History, and Order Status History
+  const [
+    { data: requirementItems },
+    { data: reqStudents },
+    { data: productionRecord },
+    { data: stageHistory },
+    { data: orderStatusHistory },
+  ] = await Promise.all([
+    supabase
+      .from("requirement_items")
+      .select("*")
+      .eq("requirement_id", order.requirement_id)
+      .order("class_name", { nullsFirst: true })
+      .order("section_name", { nullsFirst: true })
+      .order("gender", { nullsFirst: true })
+      .order("item_name")
+      .order("size"),
+    supabase
+      .from("requirement_students")
+      .select("student_id")
+      .eq("requirement_id", order.requirement_id),
+    supabase
+      .from("production_records")
+      .select("*")
+      .eq("order_id", id)
+      .maybeSingle(),
+    supabase
+      .from("production_stage_history")
+      .select(`
+        id,
+        production_record_id,
+        order_id,
+        from_stage,
+        to_stage,
+        note,
+        created_at,
+        changed_by,
+        profiles:changed_by (
+          id,
+          full_name,
+          role
+        )
+      `)
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("order_status_history")
+      .select("*")
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   const studentIds = (reqStudents || []).map((rs) => rs.student_id);
   const distinctTrackedStudents = new Set(studentIds).size;
@@ -91,8 +126,25 @@ export default async function AdminProductionDetailsPage({
   const itemStudentSets = new Map<string, Set<string>>();
 
   if (studentIds.length > 0) {
-    // Fetch in batches of 200 to prevent query string limits on large orders
+    // Fetch in batches of 200 in parallel
     const chunkSize = 200;
+    const chunks: string[][] = [];
+    for (let i = 0; i < studentIds.length; i += chunkSize) {
+      chunks.push(studentIds.slice(i, i + chunkSize));
+    }
+
+    const [chunkResults, { data: configItems }] = await Promise.all([
+      Promise.all(chunks.map(chunk =>
+        supabase
+          .from("student_uniform_sizes")
+          .select("student_id, dynamic_sizes, shirt_size, pant_size, tshirt_size, short_size")
+          .in("student_id", chunk)
+      )),
+      supabase
+        .from("school_uniform_configuration_items")
+        .select("id, item_name"),
+    ]);
+
     const allSizes: {
       student_id: string;
       dynamic_sizes: unknown;
@@ -102,20 +154,11 @@ export default async function AdminProductionDetailsPage({
       short_size: string | null;
     }[] = [];
 
-    for (let i = 0; i < studentIds.length; i += chunkSize) {
-      const chunk = studentIds.slice(i, i + chunkSize);
-      const { data: chunkSizes } = await supabase
-        .from("student_uniform_sizes")
-        .select("student_id, dynamic_sizes, shirt_size, pant_size, tshirt_size, short_size")
-        .in("student_id", chunk);
+    chunkResults.forEach(({ data: chunkSizes }) => {
       if (chunkSizes) {
         allSizes.push(...chunkSizes);
       }
-    }
-
-    const { data: configItems } = await supabase
-      .from("school_uniform_configuration_items")
-      .select("id, item_name");
+    });
 
     const configMap = new Map<string, string>();
     (configItems || []).forEach((ci) => {
@@ -186,41 +229,6 @@ export default async function AdminProductionDetailsPage({
   });
 
   const dynamicItems = Array.from(itemSummaryMap.values());
-
-  // 3. Fetch Production Record
-  const { data: productionRecord } = await supabase
-    .from("production_records")
-    .select("*")
-    .eq("order_id", id)
-    .maybeSingle();
-
-  // 4. Fetch Production Stage History with profile of updater
-  const { data: stageHistory } = await supabase
-    .from("production_stage_history")
-    .select(`
-      id,
-      production_record_id,
-      order_id,
-      from_stage,
-      to_stage,
-      note,
-      created_at,
-      changed_by,
-      profiles:changed_by (
-        id,
-        full_name,
-        role
-      )
-    `)
-    .eq("order_id", id)
-    .order("created_at", { ascending: false });
-
-  // 5. Fetch Order Status History (to find confirmed date and order events)
-  const { data: orderStatusHistory } = await supabase
-    .from("order_status_history")
-    .select("*")
-    .eq("order_id", id)
-    .order("created_at", { ascending: false });
 
   interface RawStageHistoryItem {
     id: string;

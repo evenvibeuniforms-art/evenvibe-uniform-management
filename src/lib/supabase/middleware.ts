@@ -31,10 +31,26 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  // We are not protecting routes yet as per instructions, so we just return the response.
-  // When route protection is added, it will go here.
-  
+  const pathname = request.nextUrl.pathname
+  const isProtectedRoute =
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname === '/school' ||
+    pathname.startsWith('/school/')
+
+  if (!user && isProtectedRoute) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    const redirectResponse = NextResponse.redirect(url)
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
+    })
+    return redirectResponse
+  }
+
   return supabaseResponse
 }

@@ -460,7 +460,7 @@ export default function AdminQualityCheckListView({
                       {formatDate(o.updatedAt, true)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {o.qcStatus === "ready_for_qc" ? (
+                      {o.qcStatus === "ready_for_qc" || o.qcStatus === "pending" ? (
                         <Link href={`/admin/quality-check/${o.id}`}>
                           <Button
                             size="sm"

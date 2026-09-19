@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,7 +37,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body suppressHydrationWarning className="min-h-full flex flex-col bg-slate-50">{children}</body>
+      <body suppressHydrationWarning className="min-h-full flex flex-col bg-slate-50">
+        {children}
+        <Toaster position="top-right" richColors />
+      </body>
     </html>
   );
 }

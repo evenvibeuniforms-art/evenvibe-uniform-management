@@ -12,23 +12,24 @@ export default async function AdminSchoolsPage() {
   await requireAdmin();
   const supabase = await createClient();
 
-  // Fetch all schools
-  const { data: schools, error: schoolsError } = await supabase
-    .from("schools")
-    .select("*")
-    .order("created_at", { ascending: false });
+  // Fetch all schools and school_admin profiles in parallel
+  const [
+    { data: schools, error: schoolsError },
+    { data: profiles, error: profilesError }
+  ] = await Promise.all([
+    supabase
+      .from("schools")
+      .select("*")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("profiles")
+      .select("id, full_name, role, is_active, school_id")
+      .eq("role", "school_admin"),
+  ]);
 
   if (schoolsError) {
     console.error("Failed to fetch schools:", schoolsError);
   }
-
-  // To fetch admin profiles, we will need to query profiles where role = 'school_admin'
-  // Since RLS for evenvibe_admin allows viewing all profiles, we can fetch them.
-  const { data: profiles, error: profilesError } = await supabase
-    .from("profiles")
-    .select("id, full_name, role, is_active, school_id")
-    .eq("role", "school_admin");
-    
   if (profilesError) {
     console.error("Failed to fetch profiles:", profilesError);
   }

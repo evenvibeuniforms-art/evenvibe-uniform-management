@@ -38,40 +38,44 @@ export default async function AdminOrderDetailsPage({
     notFound();
   }
 
-  const { data: requirementItems } = await supabase
-    .from("requirement_items")
-    .select("*")
-    .eq("requirement_id", order.requirement_id)
-    .order("class_name", { nullsFirst: true })
-    .order("section_name", { nullsFirst: true })
-    .order("gender", { nullsFirst: true })
-    .order("item_name")
-    .order("size");
-
-  const { data: statusHistory } = await supabase
-    .from("order_status_history")
-    .select("*")
-    .eq("order_id", id)
-    .order("created_at", { ascending: false });
-
-  const { data: modificationHistory } = await supabase
-    .from("order_modification_history")
-    .select(`
-      *,
-      requirement_items (
-        gender,
-        item_name,
-        class_name,
-        section_name,
-        size
-      ),
-      changed_by_profile:profiles!order_modification_history_changed_by_fkey(
-        id,
-        role
-      )
-    `)
-    .eq("order_id", id)
-    .order("created_at", { ascending: false });
+  const [
+    { data: requirementItems },
+    { data: statusHistory },
+    { data: modificationHistory },
+  ] = await Promise.all([
+    supabase
+      .from("requirement_items")
+      .select("*")
+      .eq("requirement_id", order.requirement_id)
+      .order("class_name", { nullsFirst: true })
+      .order("section_name", { nullsFirst: true })
+      .order("gender", { nullsFirst: true })
+      .order("item_name")
+      .order("size"),
+    supabase
+      .from("order_status_history")
+      .select("*")
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("order_modification_history")
+      .select(`
+        *,
+        requirement_items (
+          gender,
+          item_name,
+          class_name,
+          section_name,
+          size
+        ),
+        changed_by_profile:profiles!order_modification_history_changed_by_fkey(
+          id,
+          role
+        )
+      `)
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   return (
     <AdminOrderDetailsView

@@ -1,10 +1,9 @@
 "use client";
 
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Menu, LogOut } from "lucide-react";
+import { Menu } from "lucide-react";
 import { SidebarNav } from "./SidebarNav";
-import { logout } from "@/app/(auth)/login/actions";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 export function MobileSidebar({ email }: { email: string }) {
@@ -31,12 +30,7 @@ export function MobileSidebar({ email }: { email: string }) {
             <p className="text-sm font-medium text-slate-900 truncate">{email}</p>
             <p className="text-xs text-slate-500">School Admin</p>
           </div>
-          <form action={logout}>
-            <Button variant="outline" className="w-full justify-start text-slate-600" size="sm">
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
-            </Button>
-          </form>
+          <SignOutButton className="w-full text-slate-600" />
         </div>
       </SheetContent>
     </Sheet>

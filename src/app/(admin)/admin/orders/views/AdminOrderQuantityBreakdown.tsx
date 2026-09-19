@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Download, ChevronRight, ChevronDown } from "lucide-react";
-import * as XLSX from "xlsx";
 
 export interface ReqItem {
   id: string;
@@ -52,7 +51,8 @@ export default function AdminOrderQuantityBreakdown({
   const uniqueSizes = useMemo(() => Array.from(new Set(requirementItems.map((i) => i.size).filter(Boolean))) as string[], [requirementItems]);
   const uniqueGenders = useMemo(() => Array.from(new Set(requirementItems.map((i) => i.gender).filter(Boolean))) as string[], [requirementItems]);
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
 
     // Sheet 1: Overall Summary (Gender, Item, Size, Quantity)

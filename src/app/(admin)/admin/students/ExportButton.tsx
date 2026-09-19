@@ -5,7 +5,6 @@ import { Download, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { getAdminStudents } from "./actions";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 
 interface ExportButtonProps {
   filters: Record<string, unknown>;
@@ -37,6 +36,7 @@ export function ExportButton({ filters }: ExportButtonProps) {
         "Size Status": s.sizeStatus
       }));
 
+      const XLSX = await import("xlsx");
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Students");

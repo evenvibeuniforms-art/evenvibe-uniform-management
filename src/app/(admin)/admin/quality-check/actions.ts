@@ -30,7 +30,7 @@ const completeQCSchema = z.object({
 
 export async function startQualityCheck(orderId: string, remarks?: string) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
 
     const parsed = startQCSchema.safeParse({ orderId, remarks });
     if (!parsed.success) {
@@ -39,6 +39,120 @@ export async function startQualityCheck(orderId: string, remarks?: string) {
 
     const supabase = await createClient();
 
+    // 1. Check if a quality_check_records entry already exists for this order
+    const { data: existingQc } = await supabase
+      .from("quality_check_records")
+      .select("id, status, total_quantity")
+      .eq("order_id", parsed.data.orderId)
+      .maybeSingle();
+
+    if (existingQc) {
+      if (existingQc.status === "pending") {
+        // Transition existing record from pending to in_progress
+        const { error: updateErr } = await supabase
+          .from("quality_check_records")
+          .update({
+            status: "in_progress",
+            started_at: new Date().toISOString(),
+            remarks: parsed.data.remarks?.trim() || null,
+            checked_by: admin.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingQc.id);
+
+        if (updateErr) {
+          console.error("Error updating QC record status to in_progress:", updateErr);
+          return { error: updateErr.message || "Failed to start quality check" };
+        }
+
+        // Insert history record
+        await supabase.from("quality_check_history").insert({
+          quality_check_id: existingQc.id,
+          order_id: parsed.data.orderId,
+          from_status: "pending",
+          to_status: "in_progress",
+          note: parsed.data.remarks?.trim() || "Quality check inspection started",
+          changed_by: admin.id,
+        });
+
+        // Ensure order status is quality_check
+        await supabase
+          .from("orders")
+          .update({ status: "quality_check", updated_at: new Date().toISOString() })
+          .eq("id", parsed.data.orderId);
+
+        revalidatePath("/admin/quality-check");
+        revalidatePath(`/admin/quality-check/${orderId}`);
+        revalidatePath("/admin/production");
+        revalidatePath(`/admin/production/${orderId}`);
+        revalidatePath("/admin/orders");
+        revalidatePath(`/admin/orders/${orderId}`);
+
+        return { success: true, qcId: existingQc.id, totalQuantity: existingQc.total_quantity };
+      } else if (existingQc.status === "in_progress") {
+        return { success: true, qcId: existingQc.id, totalQuantity: existingQc.total_quantity };
+      } else {
+        return { error: `Quality check is already ${existingQc.status}` };
+      }
+    }
+
+    // 2. If no QC record exists, check if order is already in quality_check status
+    const { data: orderData } = await supabase
+      .from("orders")
+      .select("id, status, requirement_id")
+      .eq("id", parsed.data.orderId)
+      .single();
+
+    if (orderData && orderData.status === "quality_check") {
+      // Calculate total quantity from requirement_items snapshot
+      const { data: items } = await supabase
+        .from("requirement_items")
+        .select("quantity")
+        .eq("requirement_id", orderData.requirement_id);
+
+      const totalQty = (items || []).reduce((acc, i) => acc + (i.quantity || 0), 0);
+
+      const { data: newQc, error: insertErr } = await supabase
+        .from("quality_check_records")
+        .insert({
+          order_id: parsed.data.orderId,
+          status: "in_progress",
+          total_quantity: totalQty,
+          checked_quantity: 0,
+          passed_quantity: 0,
+          defective_quantity: 0,
+          remarks: parsed.data.remarks?.trim() || null,
+          started_at: new Date().toISOString(),
+          checked_by: admin.id,
+        })
+        .select("id")
+        .single();
+
+      if (insertErr || !newQc) {
+        console.error("Error creating QC record for quality_check order:", insertErr);
+        return { error: insertErr?.message || "Failed to start quality check" };
+      }
+
+      await supabase.from("quality_check_history").insert({
+        quality_check_id: newQc.id,
+        order_id: parsed.data.orderId,
+        from_status: "pending",
+        to_status: "in_progress",
+        note: parsed.data.remarks?.trim() || "Quality check started",
+        changed_by: admin.id,
+      });
+
+      revalidatePath("/admin/quality-check");
+      revalidatePath(`/admin/quality-check/${orderId}`);
+      revalidatePath("/admin/production");
+      revalidatePath(`/admin/production/${orderId}`);
+      revalidatePath("/admin/orders");
+      revalidatePath(`/admin/orders/${orderId}`);
+
+      return { success: true, qcId: newQc.id, totalQuantity: totalQty };
+    }
+
+    // 3. Otherwise, use the existing RPC for production completed orders
     const { data, error } = await supabase.rpc("start_quality_check", {
       p_order_id: parsed.data.orderId,
       p_remarks: parsed.data.remarks?.trim() || null,

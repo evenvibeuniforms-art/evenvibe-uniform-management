@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, startTransition } from "react";
+import { useState, useMemo, useRef, useEffect, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useRealtimeSubscription } from "@/lib/supabase/useRealtime";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -32,6 +32,13 @@ interface StudentTableProps {
 export function StudentTable({ students: initialStudents }: StudentTableProps) {
   const router = useRouter();
   const [students, setStudents] = useState<StudentWithSizeStatus[]>(initialStudents);
+  const [prevInitialStudents, setPrevInitialStudents] = useState(initialStudents);
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  if (initialStudents !== prevInitialStudents) {
+    setPrevInitialStudents(initialStudents);
+    setStudents(initialStudents);
+  }
 
   useRealtimeSubscription({
     table: "students",
@@ -54,11 +61,25 @@ export function StudentTable({ students: initialStudents }: StudentTableProps) {
           )
         );
       }
-      startTransition(() => {
-        router.refresh();
-      });
+      // Debounce server refresh to prevent cascade requests
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+      refreshTimerRef.current = setTimeout(() => {
+        startTransition(() => {
+          router.refresh();
+        });
+      }, 500);
     },
   });
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, []);
 
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState<string>("all");
@@ -138,50 +159,41 @@ export function StudentTable({ students: initialStudents }: StudentTableProps) {
   return (
     <div className="space-y-4">
       {/* Search Header */}
-      <div className="flex flex-col lg:flex-row gap-4 justify-between">
-        
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:max-w-3xl">
-          <div className="relative w-full sm:max-w-[280px]">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input 
-              type="search" 
-              placeholder="Search students..." 
-              className="pl-9 bg-white"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <Select value={classFilter} onValueChange={handleClassChange}>
-            <SelectTrigger className="w-full sm:w-[160px] bg-white">
-              <SelectValue placeholder="All Classes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Classes</SelectItem>
-              {uniqueClasses.map(c => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={sectionFilter} onValueChange={(val) => setSectionFilter(val || "all")}>
-            <SelectTrigger className="w-full sm:w-[160px] bg-white">
-              <SelectValue placeholder="All Sections" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sections</SelectItem>
-              {uniqueSections.map(s => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex flex-col sm:flex-row gap-3 w-full">
+        <div className="relative w-full sm:max-w-[280px]">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+          <Input 
+            type="search" 
+            placeholder="Search students..." 
+            className="pl-9 bg-white"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2">
-          <StudentFormDialog mode="add" />
-        </div>
+        <Select value={classFilter} onValueChange={handleClassChange}>
+          <SelectTrigger className="w-full sm:w-[160px] bg-white">
+            <SelectValue placeholder="All Classes" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Classes</SelectItem>
+            {uniqueClasses.map(c => (
+              <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={sectionFilter} onValueChange={(val) => setSectionFilter(val || "all")}>
+          <SelectTrigger className="w-full sm:w-[160px] bg-white">
+            <SelectValue placeholder="All Sections" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sections</SelectItem>
+            {uniqueSections.map(s => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Main Table */}
