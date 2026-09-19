@@ -180,7 +180,18 @@ export default function AdminProductionDetailsView({
   const router = useRouter();
 
   const [order, setOrder] = useState<OrderInfo>(initialOrder);
+  const [prevInitialOrder, setPrevInitialOrder] = useState(initialOrder);
+  if (initialOrder !== prevInitialOrder) {
+    setPrevInitialOrder(initialOrder);
+    setOrder(initialOrder);
+  }
+
   const [productionRecord, setProductionRecord] = useState<ProductionRecord | null>(initialProductionRecord);
+  const [prevInitialProductionRecord, setPrevInitialProductionRecord] = useState(initialProductionRecord);
+  if (initialProductionRecord !== prevInitialProductionRecord) {
+    setPrevInitialProductionRecord(initialProductionRecord);
+    setProductionRecord(initialProductionRecord);
+  }
 
   // Realtime subscription for order updates
   useRealtimeSubscription({
@@ -249,7 +260,9 @@ export default function AdminProductionDetailsView({
   const [isUpdatingRemarks, setIsUpdatingRemarks] = useState(false);
 
   // Derived Values
-  const isConfirmedReady = order.status === "confirmed" && !productionRecord;
+  const isReadyToStart =
+    (!productionRecord || productionRecord.stage === "ready_to_start" || productionRecord.stage === "ready") &&
+    (order.status === "confirmed" || order.status === "production");
   const currentStage = productionRecord?.stage || "ready_to_start";
   const currentStageConfig = STAGES.find((s) => s.key === currentStage);
   const currentStageIndex = STAGES.findIndex((s) => s.key === currentStage);
@@ -378,23 +391,25 @@ export default function AdminProductionDetailsView({
 
         {/* Primary Action Button */}
         <div className="flex items-center gap-2">
-          {isConfirmedReady && (
+          {isReadyToStart && (
             <Button
               className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm"
               onClick={() => setShowStartDialog(true)}
+              disabled={isStarting}
             >
               <Play className="h-4 w-4" />
-              Start Production
+              {isStarting ? "Starting..." : "Start Production"}
             </Button>
           )}
 
-          {order.status === "production" && currentStageConfig?.nextStage && (
+          {productionRecord && order.status === "production" && currentStageConfig?.nextStage && (
             <Button
               className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-sm"
               onClick={() => setShowAdvanceDialog(true)}
+              disabled={isAdvancing}
             >
               <ArrowRight className="h-4 w-4" />
-              {currentStageConfig.nextAction}
+              {isAdvancing ? "Updating..." : currentStageConfig.nextAction}
             </Button>
           )}
 
@@ -406,6 +421,7 @@ export default function AdminProductionDetailsView({
                 setEditCompletedQty(productionRecord.completed_quantity);
                 setShowQtyDialog(true);
               }}
+              disabled={isUpdatingQty}
             >
               <Edit3 className="h-3.5 w-3.5" />
               Update Progress
@@ -577,6 +593,120 @@ export default function AdminProductionDetailsView({
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Manufacturing Processing Actions Card */}
+              <div className="rounded-xl border p-5 bg-gradient-to-r from-slate-50 to-white shadow-sm">
+                {isReadyToStart && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1 text-center sm:text-left">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 mb-1">
+                        Ready To Start
+                      </div>
+                      <h4 className="text-base font-bold text-slate-900">
+                        Initiate Manufacturing Workflow
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        Order #{order.order_number} is ready. Start production to track cutting, stitching, and finishing.
+                      </p>
+                    </div>
+                    <Button
+                      size="lg"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white shadow gap-2 font-medium px-6 shrink-0 w-full sm:w-auto"
+                      onClick={() => setShowStartDialog(true)}
+                      disabled={isStarting}
+                    >
+                      <Play className="h-4 w-4" />
+                      {isStarting ? "Starting..." : "Start Production"}
+                    </Button>
+                  </div>
+                )}
+
+                {productionRecord && currentStage !== "production_completed" && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Active Stage:
+                          </span>
+                          <Badge className="bg-emerald-600 text-white text-xs font-medium">
+                            {formatStageLabel(currentStage)}
+                          </Badge>
+                        </div>
+                        <h4 className="text-base font-bold text-slate-900 mt-1">
+                          Manufacturing Processing in Progress
+                        </h4>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-slate-300 hover:bg-slate-100 text-slate-800 gap-1.5 shadow-sm"
+                          onClick={() => {
+                            setEditCompletedQty(productionRecord.completed_quantity);
+                            setShowQtyDialog(true);
+                          }}
+                          disabled={isUpdatingQty}
+                        >
+                          <Edit3 className="h-3.5 w-3.5 text-slate-600" />
+                          Update Completed Units ({completedQuantity}/{totalQuantity})
+                        </Button>
+
+                        {currentStageConfig?.nextStage && (
+                          <Button
+                            size="sm"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 shadow font-medium"
+                            onClick={() => setShowAdvanceDialog(true)}
+                            disabled={isAdvancing}
+                          >
+                            <ArrowRight className="h-4 w-4" />
+                            {isAdvancing ? "Updating..." : currentStageConfig.nextAction}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-slate-600 bg-white p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <span>
+                        Manufactured: <strong>{completedQuantity}</strong> / <strong>{totalQuantity}</strong> units ({progressPercent}%)
+                      </span>
+                      {currentStageConfig?.nextStage && (
+                        <span className="text-indigo-700 font-medium">
+                          Next Stage: {formatStageLabel(currentStageConfig.nextStage)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {currentStage === "production_completed" && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1 text-center sm:text-left">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 mb-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Completed
+                      </div>
+                      <h4 className="text-base font-bold text-slate-900">
+                        Production Successfully Completed
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        All {totalQuantity} units have been manufactured. Order is ready for Quality Check.
+                      </p>
+                    </div>
+
+                    <Link href={`/admin/quality-check/${order.id}`} className="shrink-0 w-full sm:w-auto">
+                      <Button
+                        size="lg"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white shadow gap-2 font-medium px-6 w-full sm:w-auto"
+                      >
+                        <ClipboardCheck className="h-4 w-4" />
+                        Go to Quality Check
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </div>
 
               {/* Remarks Section */}

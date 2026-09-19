@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 
 export async function startProduction(orderId: string, initialRemarks?: string) {
   try {
-    await requireAdmin();
+    const profile = await requireAdmin();
     const supabase = await createClient();
 
     // Call atomic RPC
@@ -15,13 +15,67 @@ export async function startProduction(orderId: string, initialRemarks?: string) 
       p_remarks: initialRemarks?.trim() || null,
     });
 
-    if (error) {
-      console.error("startProduction RPC error:", error);
-      return { error: error.message || "Failed to start production" };
-    }
+    if (error || (data && !data.success)) {
+      const errMsg = error?.message || data?.error || "";
+      // If order is already in 'production' status but lacks a production_record, initialize it safely
+      if (errMsg.toLowerCase().includes("status: production") || errMsg.toLowerCase().includes("in production")) {
+        const { data: ord } = await supabase
+          .from("orders")
+          .select("id, requirement_id, status")
+          .eq("id", orderId)
+          .single();
 
-    if (data && !data.success) {
-      return { error: data.error || "Failed to start production" };
+        if (ord && ord.status === "production") {
+          const { data: existingRec } = await supabase
+            .from("production_records")
+            .select("id")
+            .eq("order_id", orderId)
+            .maybeSingle();
+
+          if (!existingRec) {
+            const { data: reqItems } = await supabase
+              .from("requirement_items")
+              .select("quantity")
+              .eq("requirement_id", ord.requirement_id);
+
+            const totalQty = (reqItems || []).reduce((acc, i) => acc + (i.quantity || 0), 0);
+
+            const { data: newProd, error: insertErr } = await supabase
+              .from("production_records")
+              .insert({
+                order_id: orderId,
+                stage: "production_started",
+                total_quantity: totalQty,
+                completed_quantity: 0,
+                started_at: new Date().toISOString(),
+                remarks: initialRemarks?.trim() || null,
+              })
+              .select("id")
+              .single();
+
+            if (!insertErr && newProd) {
+              await supabase.from("production_stage_history").insert({
+                production_record_id: newProd.id,
+                order_id: orderId,
+                from_stage: null,
+                to_stage: "production_started",
+                note: initialRemarks?.trim() || "Production started",
+                changed_by: profile.id,
+              });
+
+              revalidatePath("/admin/production");
+              revalidatePath(`/admin/production/${orderId}`);
+              revalidatePath("/admin/orders");
+              revalidatePath(`/admin/orders/${orderId}`);
+
+              return { success: true, totalQuantity: totalQty };
+            }
+          }
+        }
+      }
+
+      console.error("startProduction RPC error:", error || data?.error);
+      return { error: data?.error || error?.message || "Failed to start production" };
     }
 
     revalidatePath("/admin/production");
@@ -44,6 +98,25 @@ export async function updateProductionStage(
   try {
     await requireAdmin();
     const supabase = await createClient();
+
+    // If advancing to production_completed, ensure completed_quantity matches total_quantity
+    if (nextStage === "production_completed") {
+      const { data: prodRec } = await supabase
+        .from("production_records")
+        .select("total_quantity, completed_quantity")
+        .eq("order_id", orderId)
+        .maybeSingle();
+
+      if (prodRec && prodRec.completed_quantity < prodRec.total_quantity) {
+        await supabase
+          .from("production_records")
+          .update({
+            completed_quantity: prodRec.total_quantity,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("order_id", orderId);
+      }
+    }
 
     // Call atomic RPC
     const { data, error } = await supabase.rpc("advance_production_stage", {
