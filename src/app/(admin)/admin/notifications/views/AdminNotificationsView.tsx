@@ -96,7 +96,7 @@ export function AdminNotificationsView({
         </div>
         <Button
           onClick={handleOpenCreate}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+          className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white shrink-0"
         >
           <Plus className="h-4 w-4 mr-1.5" />
           Create Notification
@@ -155,10 +155,10 @@ export function AdminNotificationsView({
             <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Published
             </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <CheckCircle2 className="h-4 w-4 text-evenvibe-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-700">
+            <div className="text-2xl font-bold text-evenvibe-deep">
               {kpis.published}
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">Active & visible in schools</p>

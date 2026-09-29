@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,27 +15,28 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Menu, User, LayoutDashboard, School, Users, ShoppingCart, BarChart, Factory, Settings, LogOut, Loader2 } from "lucide-react";
+import { Menu, User, LogOut, Loader2 } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { toast } from "sonner";
+import { adminNavItems, isAdminRouteActive } from "./admin-nav";
+import { AdminNotificationBell } from "./AdminNotificationBell";
+import { AdminBusinessNotificationItem } from "@/lib/notifications/adminNotifications";
 
 interface AdminHeaderProps {
   onLogout?: () => void;
   email?: string;
+  initialNotifications?: AdminBusinessNotificationItem[];
+  initialUnreadCount?: number;
 }
 
-const navigation = [
-  { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { name: "Schools", href: "/admin/schools", icon: School },
-  { name: "Students", href: "/admin/students", icon: Users, disabled: true },
-  { name: "Orders", href: "/admin/orders", icon: ShoppingCart, disabled: true },
-  { name: "Reports", href: "/admin/reports", icon: BarChart, disabled: true },
-  { name: "Production", href: "/admin/production", icon: Factory, disabled: true },
-  { name: "Settings", href: "/admin/settings", icon: Settings, disabled: true },
-];
-
-export function AdminHeader({ onLogout, email }: AdminHeaderProps) {
+export function AdminHeader({
+  onLogout,
+  email,
+  initialNotifications = [],
+  initialUnreadCount = 0,
+}: AdminHeaderProps) {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -61,53 +63,61 @@ export function AdminHeader({ onLogout, email }: AdminHeaderProps) {
 
   return (
     <header className="flex h-14 items-center gap-4 border-b bg-slate-50 px-4 lg:h-[60px] lg:px-6">
-      <Sheet>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetTrigger render={
-          <Button variant="outline" size="icon" className="shrink-0 lg:hidden">
+          <Button variant="outline" size="icon" className="shrink-0 md:hidden">
             <Menu className="h-5 w-5" />
             <span className="sr-only">Toggle navigation menu</span>
           </Button>
         } />
-        <SheetContent side="left" className="flex flex-col p-0 w-72">
-          <div className="flex h-14 items-center border-b px-4">
-            <Link href="/admin" className="flex items-center gap-2 font-bold text-xl text-slate-900 tracking-tight">
-              <span className="bg-emerald-600 text-white p-1 rounded-md">EV</span>
+        <SheetContent side="left" className="flex flex-col p-0 w-72 max-w-[85vw] bg-evenvibe-deep border-r-evenvibe-deep/20 text-white">
+          <VisuallyHidden>
+            <SheetTitle>Admin Navigation Menu</SheetTitle>
+          </VisuallyHidden>
+          <div className="flex h-14 shrink-0 items-center border-b border-white/10 px-4">
+            <Link
+              href="/admin"
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-2 font-bold text-xl text-white tracking-tight"
+            >
+              <span className="bg-evenvibe-primary text-white p-1 rounded-md shadow-sm">EV</span>
               <span>EvenVibe Admin</span>
             </Link>
           </div>
-          <nav className="grid gap-2 p-4 text-sm font-medium">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          <div className="flex-1 overflow-y-auto py-4">
+            <nav className="grid gap-1.5 px-3 text-sm font-medium">
+              {adminNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = isAdminRouteActive(pathname, item.href);
 
-              return (
-                <Link
-                  key={item.name}
-                  href={item.disabled ? "#" : item.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-slate-500 transition-all hover:text-slate-900",
-                    isActive ? "bg-slate-200 text-slate-900 font-semibold" : "hover:bg-slate-100",
-                    item.disabled && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-slate-500"
-                  )}
-                  onClick={(e) => item.disabled && e.preventDefault()}
-                >
-                  <Icon className="h-5 w-5" />
-                  {item.name}
-                  {item.disabled && (
-                    <span className="ml-auto text-[10px] uppercase tracking-wider font-bold bg-slate-200 px-1.5 py-0.5 rounded text-slate-500">
-                      Soon
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all",
+                      isActive ? "bg-evenvibe-primary text-white shadow-md font-semibold" : "text-emerald-100/70 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
         </SheetContent>
       </Sheet>
       <div className="w-full flex-1">
         {/* Placeholder for future search or breadcrumbs */}
       </div>
-      <DropdownMenu>
+      <div className="flex items-center gap-3">
+        <AdminNotificationBell
+          initialNotifications={initialNotifications}
+          initialUnreadCount={initialUnreadCount}
+        />
+        <DropdownMenu>
         <DropdownMenuTrigger render={
           <Button variant="secondary" size="icon" className="rounded-full">
             <User className="h-5 w-5" />
@@ -129,7 +139,7 @@ export function AdminHeader({ onLogout, email }: AdminHeaderProps) {
               e.preventDefault();
               handleLogout();
             }}
-            className="text-red-600 focus:text-red-600 font-medium cursor-pointer"
+            className="text-status-error focus:text-status-error font-medium cursor-pointer"
           >
             {isLoggingOut ? (
               <>
@@ -145,6 +155,7 @@ export function AdminHeader({ onLogout, email }: AdminHeaderProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </div>
     </header>
   );
 }

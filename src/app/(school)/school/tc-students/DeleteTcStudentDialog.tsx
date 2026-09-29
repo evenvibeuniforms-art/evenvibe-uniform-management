@@ -51,9 +51,9 @@ export function DeleteTcStudentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <div className="flex items-center gap-2 text-red-600">
+          <div className="flex items-center gap-2 text-status-error">
             <div className="p-2 rounded-lg bg-red-50">
-              <Trash2 className="h-5 w-5 text-red-600" />
+              <Trash2 className="h-5 w-5 text-status-error" />
             </div>
             <DialogTitle className="text-lg font-bold text-slate-900">
               Remove TC Record
@@ -66,7 +66,7 @@ export function DeleteTcStudentDialog({
 
         {errorMsg && (
           <div className="flex items-start gap-2.5 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-            <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+            <AlertCircle className="h-4 w-4 text-status-error shrink-0 mt-0.5" />
             <div className="flex-1">{errorMsg}</div>
           </div>
         )}
@@ -91,9 +91,15 @@ export function DeleteTcStudentDialog({
             </span>
           </div>
           <div>
-            <span className="text-slate-500">TC Number: </span>
+            <span className="text-slate-500">TC Date: </span>
             <span className="font-semibold text-slate-900">
-              {tcStudent.tc_number}
+              {tcStudent.tc_date
+                ? new Date(tcStudent.tc_date + "T00:00:00").toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : "Not Recorded"}
             </span>
           </div>
         </div>
@@ -119,7 +125,7 @@ export function DeleteTcStudentDialog({
             variant="destructive"
             onClick={handleDelete}
             disabled={isPending}
-            className="bg-red-600 hover:bg-red-700 text-white font-medium"
+            className="bg-status-error hover:bg-red-700 text-white font-medium"
           >
             {isPending ? (
               <>

@@ -24,7 +24,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     ] = await Promise.all([
       supabase
         .from("schools")
-        .select("id, name, school_code, is_active, created_at")
+        .select("id, name, school_code, city, is_active, created_at")
         .order("name", { ascending: true }),
       supabase
         .from("students")
@@ -107,7 +107,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         stage: "under_review",
         label: "Under Review",
         count: orders.filter((o) => o.status === "under_review").length,
-        colorClass: "bg-indigo-50 text-indigo-700 border-indigo-200",
+        colorClass: "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light",
       },
       {
         stage: "confirmed",
@@ -125,13 +125,13 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         stage: "quality_check",
         label: "Quality Check",
         count: orders.filter((o) => o.status === "quality_check").length,
-        colorClass: "bg-purple-50 text-purple-700 border-purple-200",
+        colorClass: "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light",
       },
       {
         stage: "packed",
         label: "Packed",
         count: orders.filter((o) => o.status === "packed").length,
-        colorClass: "bg-teal-50 text-teal-700 border-teal-200",
+        colorClass: "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light",
       },
       {
         stage: "dispatched",
@@ -149,7 +149,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         stage: "delivered",
         label: "Delivered",
         count: orders.filter((o) => o.status === "delivered").length,
-        colorClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        colorClass: "bg-evenvibe-light text-evenvibe-deep border-emerald-200",
       },
       {
         stage: "cancelled",
@@ -195,6 +195,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         id: s.id,
         name: s.name,
         school_code: s.school_code,
+        city: s.city || null,
         students_count: schoolStudents.length,
         orders_count: schoolOrders.length,
         latest_order_number: latestOrder?.order_number || null,

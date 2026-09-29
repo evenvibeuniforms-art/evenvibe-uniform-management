@@ -49,12 +49,12 @@ export function ExportReportButton({ tabName, tabLabel, filters }: ExportReportB
     >
       {isExporting ? (
         <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-evenvibe-primary" />
           <span>Exporting...</span>
         </>
       ) : (
         <>
-          <Download className="h-3.5 w-3.5 text-emerald-600" />
+          <Download className="h-3.5 w-3.5 text-evenvibe-primary" />
           <span>Export Excel</span>
         </>
       )}

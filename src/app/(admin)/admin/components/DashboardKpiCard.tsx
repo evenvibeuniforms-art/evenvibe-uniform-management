@@ -23,8 +23,8 @@ export default function DashboardKpiCard({
   value,
   subtitle,
   icon: Icon,
-  iconBgClass = "bg-emerald-50",
-  iconColorClass = "text-emerald-600",
+  iconBgClass = "bg-evenvibe-light",
+  iconColorClass = "text-evenvibe-primary",
   href,
   badge,
 }: DashboardKpiCardProps) {

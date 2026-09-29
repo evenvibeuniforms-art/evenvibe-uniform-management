@@ -61,7 +61,7 @@ export function UserStatusDialog({
           <div className="flex items-center gap-3">
             <div
               className={`p-2.5 rounded-full ${
-                isActivating ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                isActivating ? "bg-emerald-100 text-evenvibe-deep" : "bg-red-100 text-red-700"
               }`}
             >
               {isActivating ? (
@@ -115,7 +115,7 @@ export function UserStatusDialog({
             variant={isActivating ? "default" : "destructive"}
             onClick={handleConfirm}
             disabled={loading}
-            className={isActivating ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}
+            className={isActivating ? "bg-evenvibe-primary hover:bg-evenvibe-deep text-white" : ""}
           >
             {loading ? (
               <>

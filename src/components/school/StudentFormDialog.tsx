@@ -162,7 +162,7 @@ export function StudentFormDialog({
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       {!isControlled ? (
-        <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm gap-2 w-full sm:w-auto cursor-pointer">
+        <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-evenvibe-primary hover:bg-evenvibe-deep text-white shadow-sm gap-2 w-full sm:w-auto cursor-pointer">
           {trigger || (
             <>
               <Plus className="h-4 w-4" />
@@ -171,7 +171,7 @@ export function StudentFormDialog({
           )}
         </DialogTrigger>
       ) : trigger ? (
-        <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer">
+        <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-evenvibe-primary hover:bg-evenvibe-deep text-white cursor-pointer">
           {trigger}
         </DialogTrigger>
       ) : null}
@@ -186,7 +186,7 @@ export function StudentFormDialog({
         </DialogHeader>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm font-medium">
+          <div className="bg-red-50 text-status-error p-3 rounded-md text-sm font-medium">
             {error}
           </div>
         )}
@@ -199,14 +199,14 @@ export function StudentFormDialog({
                 <Label htmlFor="student_name">Student Name *</Label>
                 <Input id="student_name" {...register("student_name")} placeholder="Full name" />
                 {errors.student_name && (
-                  <p className="text-xs text-red-500">{errors.student_name.message}</p>
+                  <p className="text-xs text-status-error">{errors.student_name.message}</p>
                 )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="admission_number">Admission Number *</Label>
                 <Input id="admission_number" {...register("admission_number")} placeholder="e.g. ADM001" />
                 {errors.admission_number && (
-                  <p className="text-xs text-red-500">{errors.admission_number.message}</p>
+                  <p className="text-xs text-status-error">{errors.admission_number.message}</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -229,21 +229,21 @@ export function StudentFormDialog({
                       </SelectItem>
                     ))}
                     {classValue && !STANDARD_CLASSES.includes(classValue) && (
-                      <SelectItem value={classValue} disabled className="text-red-500 italic">
+                      <SelectItem value={classValue} disabled className="text-status-error italic">
                         Legacy: {classValue} (Invalid)
                       </SelectItem>
                     )}
                   </SelectContent>
                 </Select>
                 {errors.class_name && (
-                  <p className="text-xs text-red-500">{errors.class_name.message}</p>
+                  <p className="text-xs text-status-error">{errors.class_name.message}</p>
                 )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="section">Section *</Label>
                 <Input id="section" {...register("section")} placeholder="e.g. A" />
                 {errors.section && (
-                  <p className="text-xs text-red-500">{errors.section.message}</p>
+                  <p className="text-xs text-status-error">{errors.section.message}</p>
                 )}
               </div>
             </div>
@@ -272,14 +272,14 @@ export function StudentFormDialog({
                       </SelectItem>
                     ))}
                     {genderValue && !(VALID_GENDERS as readonly string[]).includes(genderValue) && (
-                      <SelectItem value={genderValue} disabled className="text-red-500 italic">
+                      <SelectItem value={genderValue} disabled className="text-status-error italic">
                         Legacy: {genderValue} (Invalid)
                       </SelectItem>
                     )}
                   </SelectContent>
                 </Select>
                 {errors.gender && (
-                  <p className="text-xs text-red-500">{errors.gender.message}</p>
+                  <p className="text-xs text-status-error">{errors.gender.message}</p>
                 )}
               </div>
             </div>
@@ -309,7 +309,7 @@ export function StudentFormDialog({
             <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={isSubmitting}>
+            <Button type="submit" className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {mode === "add" ? "Save Student" : "Update Student"}
             </Button>

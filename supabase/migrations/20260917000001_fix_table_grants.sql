@@ -12,3 +12,4 @@ GRANT SELECT ON TABLE public.school_uniform_configuration_classes TO authenticat
 GRANT SELECT, INSERT, UPDATE ON TABLE public.school_uniform_configuration_items TO authenticated;
 
 COMMIT;
+

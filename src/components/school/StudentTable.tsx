@@ -13,6 +13,7 @@ import { StudentFormDialog } from "./StudentFormDialog";
 import { deleteStudent } from "@/app/(school)/school/students/actions";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 export interface StudentWithSizeStatus {
   id: string;
@@ -138,7 +139,7 @@ export function StudentTable({ students: initialStudents }: StudentTableProps) {
 
   const getStatusBadge = (isComplete: boolean) => {
     if (isComplete) {
-      return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Completed</Badge>;
+      return <Badge variant="outline" className="bg-evenvibe-light text-evenvibe-deep border-emerald-200">Completed</Badge>;
     }
     return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pending</Badge>;
   };
@@ -196,8 +197,8 @@ export function StudentTable({ students: initialStudents }: StudentTableProps) {
         </Select>
       </div>
 
-      {/* Main Table */}
-      <div className="rounded-md border border-slate-200 bg-white shadow-sm overflow-x-auto">
+      {/* Desktop Main Table */}
+      <div className="hidden md:block rounded-md border border-slate-200 bg-white shadow-sm overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
@@ -256,7 +257,7 @@ export function StudentTable({ students: initialStudents }: StudentTableProps) {
                           <Edit2 className="mr-2 h-4 w-4 text-slate-500" />
                           <span>Edit</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setStudentToDelete(student.id)} className="text-red-600 cursor-pointer">
+                        <DropdownMenuItem onClick={() => setStudentToDelete(student.id)} className="text-status-error cursor-pointer">
                           <Trash2 className="mr-2 h-4 w-4" />
                           <span>Delete</span>
                         </DropdownMenuItem>
@@ -274,6 +275,69 @@ export function StudentTable({ students: initialStudents }: StudentTableProps) {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {filteredStudents.length > 0 ? (
+          filteredStudents.map((student) => {
+            const sizeRecord = Array.isArray(student.student_uniform_sizes) 
+              ? student.student_uniform_sizes[0] 
+              : student.student_uniform_sizes;
+            const isComplete = sizeRecord?.is_complete || false;
+
+            return (
+              <MobileCard key={student.id}>
+                <MobileCardField label="Student Name">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900">{student.student_name}</span>
+                    {!student.is_active && (
+                      <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 text-[10px] uppercase font-bold py-0 h-4">Inactive</Badge>
+                    )}
+                  </div>
+                </MobileCardField>
+
+                <MobileCardField label="Admission Number" value={student.admission_number || "-"} />
+
+                <MobileCardField label="Class" value={student.class_name || "-"} />
+
+                <MobileCardField label="Section" value={student.section || "-"} />
+
+                <MobileCardField label="Gender" value={student.gender || "-"} />
+
+                <MobileCardField label="Size Status">
+                  {getStatusBadge(isComplete)}
+                </MobileCardField>
+
+                <MobileCardActions>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 p-0 border border-slate-200">
+                      <span className="sr-only">Open menu</span>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-[160px]">
+                      <DropdownMenuItem 
+                        onClick={() => setStudentToEdit(student)} 
+                        className="cursor-pointer"
+                      >
+                        <Edit2 className="mr-2 h-4 w-4 text-slate-500" />
+                        <span>Edit</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setStudentToDelete(student.id)} className="text-status-error cursor-pointer">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span>Delete</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </MobileCardActions>
+              </MobileCard>
+            );
+          })
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500 text-sm">
+            No students found matching your filters.
+          </div>
+        )}
       </div>
 
       {/* Delete Confirmation Dialog */}

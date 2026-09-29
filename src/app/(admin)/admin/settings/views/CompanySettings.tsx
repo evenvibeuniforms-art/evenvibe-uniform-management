@@ -54,7 +54,7 @@ export function CompanySettings({ initialData }: CompanySettingsProps) {
       action={
         <div className="flex items-center gap-2">
           {isDirty && (
-            <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-semibold text-status-warning bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
               Unsaved Changes
             </span>
           )}
@@ -65,7 +65,7 @@ export function CompanySettings({ initialData }: CompanySettingsProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="companyName" className="text-xs font-semibold text-slate-700">
-              Company Name <span className="text-red-500">*</span>
+              Company Name <span className="text-status-error">*</span>
             </Label>
             <div className="relative">
               <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -180,7 +180,7 @@ export function CompanySettings({ initialData }: CompanySettingsProps) {
           <Button
             type="submit"
             disabled={loading || !isDirty}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
           >
             {loading ? (
               <>

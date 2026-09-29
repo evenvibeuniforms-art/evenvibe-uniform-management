@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import AdminProductionListView from "./views/AdminProductionListView";
+import { resolveOrderCurrentStage, OrderWorkflowStage } from "@/lib/productionWorkflow";
 
 export const metadata = {
   title: "Production Management | EvenVibe Admin",
@@ -41,6 +42,7 @@ interface OrderRow {
         updated_at: string;
       }[]
     | null;
+  order_production_workflows: OrderWorkflowStage[] | null;
 }
 
 function calculateCutoffDate(days: number): string {
@@ -101,6 +103,15 @@ export default async function AdminProductionPage({
         completed_at,
         remarks,
         updated_at
+      ),
+      order_production_workflows (
+        id,
+        order_id,
+        stage_key,
+        sequence_order,
+        status,
+        started_at,
+        completed_at
       )
     `, { count: "exact" })
     .in("status", ["confirmed", "production"]);
@@ -121,20 +132,54 @@ export default async function AdminProductionPage({
     }
   }
 
-  // Server-side status filtering
+  // Server-side status filtering based on custom workflow stage
   if (status === "ready_to_start") {
     query = query.eq("status", "confirmed");
-  } else if (
-    ["production_started", "cutting", "stitching", "finishing", "production_completed"].includes(status)
-  ) {
+  } else if (status === "production_completed") {
     const { data: matchingRecs } = await supabase
       .from("production_records")
       .select("order_id")
-      .eq("stage", status);
+      .eq("stage", "production_completed");
 
     const matchingOrderIds = matchingRecs?.map((r) => r.order_id) || [];
     if (matchingOrderIds.length > 0) {
       query = query.in("id", matchingOrderIds);
+    } else {
+      query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+    }
+  } else if (
+    [
+      "stock_sizes",
+      "inventory",
+      "cutting",
+      "stitching",
+      "printing",
+      "embroidering",
+      "ironing_packing",
+      "checking",
+      "production_started",
+      "finishing",
+    ].includes(status)
+  ) {
+    // Find orders where this stage is currently in_progress in order_production_workflows
+    const [wfRes, recRes] = await Promise.all([
+      supabase
+        .from("order_production_workflows")
+        .select("order_id")
+        .eq("stage_key", status)
+        .eq("status", "in_progress"),
+      supabase
+        .from("production_records")
+        .select("order_id")
+        .eq("stage", status),
+    ]);
+
+    const wfOrderIds = wfRes.data?.map((w) => w.order_id) || [];
+    const recOrderIds = recRes.data?.map((r) => r.order_id) || [];
+    const combinedIds = Array.from(new Set([...wfOrderIds, ...recOrderIds]));
+
+    if (combinedIds.length > 0) {
+      query = query.in("id", combinedIds);
     } else {
       query = query.eq("id", "00000000-0000-0000-0000-000000000000"); // No matches
     }
@@ -172,20 +217,24 @@ export default async function AdminProductionPage({
 
   const typedOrders = (ordersData || []) as unknown as OrderRow[];
 
-  // Format list items
+  // Format list items resolving current stage from EACH order's own workflow
   const formattedOrders = typedOrders.map((o) => {
     const req = o.requirements;
     const totalStudents = req?.total_students || 0;
     const totalItems =
       req?.requirement_items?.reduce((acc: number, item) => acc + (item.quantity || 0), 0) || 0;
 
-    // production_records can be an array from Supabase join or single object
     const prodRecord = Array.isArray(o.production_records)
       ? o.production_records[0]
       : o.production_records;
 
-    const isConfirmed = o.status === "confirmed" && !prodRecord;
-    const stage = isConfirmed ? "ready_to_start" : (prodRecord?.stage || "ready_to_start");
+    const resolved = resolveOrderCurrentStage(
+      o.order_production_workflows,
+      o.status,
+      prodRecord?.stage
+    );
+
+    const stage = resolved.currentStageKey;
     const totalQty = prodRecord ? prodRecord.total_quantity : totalItems;
     const completedQty = prodRecord ? prodRecord.completed_quantity : 0;
     const progressPercent = totalQty > 0 ? Math.round((completedQty / totalQty) * 100) : 0;
@@ -205,6 +254,7 @@ export default async function AdminProductionPage({
       hasProductionRecord: !!prodRecord,
     };
   });
+
 
   return (
     <AdminProductionListView

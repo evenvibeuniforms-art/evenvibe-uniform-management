@@ -290,12 +290,12 @@ function SchoolInfoForm({ school }: { school: SchoolData }) {
       <div className="space-y-4 pb-4 border-b border-slate-100">
         <div className="flex items-center gap-2">
           {school.is_active ? (
-            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1.5">
+            <Badge className="bg-evenvibe-light text-evenvibe-deep border-emerald-200 gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Active
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-red-600 border-red-200 gap-1.5">
+            <Badge variant="outline" className="text-status-error border-red-200 gap-1.5">
               <XCircle className="h-3.5 w-3.5" />
               Inactive
             </Badge>
@@ -568,7 +568,7 @@ export function SettingsView({ profile, school }: SettingsViewProps) {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-50">
-              <Lock className="h-5 w-5 text-amber-600" />
+              <Lock className="h-5 w-5 text-status-warning" />
             </div>
             <div>
               <CardTitle className="text-base">Change Password</CardTitle>
@@ -589,7 +589,7 @@ export function SettingsView({ profile, school }: SettingsViewProps) {
         <CardHeader className="pb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50">
-              <LogOut className="h-5 w-5 text-red-500" />
+              <LogOut className="h-5 w-5 text-status-error" />
             </div>
             <div>
               <CardTitle className="text-base text-red-700">Session</CardTitle>

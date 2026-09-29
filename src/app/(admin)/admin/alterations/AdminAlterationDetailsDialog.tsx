@@ -205,7 +205,7 @@ export function AdminAlterationDetailsDialog({
       case "rejected":
         return <Badge className="bg-red-100 text-red-800 border-red-200 uppercase text-xs font-semibold">Rejected</Badge>;
       case "rework":
-        return <Badge className="bg-purple-100 text-purple-800 border-purple-200 uppercase text-xs font-semibold">Rework</Badge>;
+        return <Badge className="bg-evenvibe-light text-evenvibe-deep border-evenvibe-light uppercase text-xs font-semibold">Rework</Badge>;
       case "completed":
         return <Badge className="bg-slate-100 text-slate-800 border-slate-200 uppercase text-xs font-semibold">Completed</Badge>;
       default:
@@ -240,7 +240,7 @@ export function AdminAlterationDetailsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between text-xl font-bold text-slate-900 border-b pb-3">
             <div className="flex items-center gap-2">
-              <Scissors className="h-5 w-5 text-emerald-600" />
+              <Scissors className="h-5 w-5 text-evenvibe-primary" />
               <span>{data?.request_number || "Alteration Request Review"}</span>
             </div>
             {data && renderStatusBadge(data.status)}
@@ -249,16 +249,16 @@ export function AdminAlterationDetailsDialog({
 
         {loading ? (
           <div className="py-16 flex flex-col items-center justify-center text-slate-500 gap-2">
-            <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+            <Loader2 className="h-6 w-6 animate-spin text-evenvibe-primary" />
             <p className="text-sm">Loading alteration details...</p>
           </div>
         ) : error ? (
-          <div className="py-8 text-center text-red-600 text-sm">{error}</div>
+          <div className="py-8 text-center text-status-error text-sm">{error}</div>
         ) : !data ? null : (
           <div className="space-y-5 pt-1">
             {actionError && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-800">
-                <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                <AlertCircle className="h-4 w-4 text-status-error mt-0.5 shrink-0" />
                 <div>
                   <div className="font-semibold">Action Error</div>
                   <div>{actionError}</div>
@@ -267,8 +267,8 @@ export function AdminAlterationDetailsDialog({
             )}
 
             {actionSuccess && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-2 text-sm text-emerald-900">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+              <div className="p-3 bg-evenvibe-light border border-emerald-200 rounded-lg flex items-start gap-2 text-sm text-emerald-900">
+                <CheckCircle2 className="h-4 w-4 text-evenvibe-primary mt-0.5 shrink-0" />
                 <div>
                   <div className="font-semibold">Status Updated</div>
                   <div>{actionSuccess}</div>
@@ -282,7 +282,7 @@ export function AdminAlterationDetailsDialog({
                 <span className="text-xs text-slate-500 block">School</span>
                 <span className="font-semibold text-slate-900 flex items-center gap-1.5 mt-0.5">
                   <School className="h-3.5 w-3.5 text-slate-400" />
-                  {data.school?.name || "-"}
+                  {data.school?.name || "Unknown School"}
                 </span>
               </div>
               <div>
@@ -310,16 +310,16 @@ export function AdminAlterationDetailsDialog({
             )}
 
             {data.rework_remarks && (
-              <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-lg">
-                <span className="text-xs font-semibold uppercase text-purple-800 tracking-wider block mb-1">
+              <div className="p-3.5 bg-evenvibe-light border border-evenvibe-light rounded-lg">
+                <span className="text-xs font-semibold uppercase text-evenvibe-deep tracking-wider block mb-1">
                   Rework Instructions / Remarks
                 </span>
-                <p className="text-sm text-purple-900">{data.rework_remarks}</p>
+                <p className="text-sm text-evenvibe-deep">{data.rework_remarks}</p>
               </div>
             )}
 
             {data.completed_remarks && (
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <div className="p-3.5 bg-evenvibe-light border border-emerald-200 rounded-lg">
                 <span className="text-xs font-semibold uppercase text-emerald-800 tracking-wider block mb-1">
                   Completion Remarks
                 </span>
@@ -383,7 +383,7 @@ export function AdminAlterationDetailsDialog({
             {/* Uniform Item & Issue */}
             <div className="border rounded-lg p-4 space-y-3">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Scissors className="h-4 w-4 text-emerald-600" />
+                <Scissors className="h-4 w-4 text-evenvibe-primary" />
                 Uniform Item & Issue Specification
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -401,7 +401,7 @@ export function AdminAlterationDetailsDialog({
                 </div>
                 <div>
                   <span className="text-xs text-slate-500 block">Required Size</span>
-                  <span className="font-bold text-emerald-700 text-base">{data.required_size || "-"}</span>
+                  <span className="font-bold text-evenvibe-deep text-base">{data.required_size || "-"}</span>
                 </div>
               </div>
 
@@ -429,7 +429,7 @@ export function AdminAlterationDetailsDialog({
                     href={data.signedPhotoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                    className="inline-flex items-center gap-1 text-xs text-evenvibe-primary hover:text-emerald-700 font-medium"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Open full size
@@ -458,7 +458,7 @@ export function AdminAlterationDetailsDialog({
                 ) : (
                   data.history.map((h: HistoryItem, idx: number) => (
                     <div key={h.id || idx} className="flex items-start gap-3 text-sm">
-                      <div className="h-2 w-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                      <div className="h-2 w-2 rounded-full bg-status-success mt-1.5 shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-slate-900 uppercase text-xs">
@@ -479,7 +479,7 @@ export function AdminAlterationDetailsDialog({
               <div className="p-4 border border-red-200 bg-red-50/60 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-red-900 flex items-center gap-1.5">
-                    <XCircle className="h-4 w-4 text-red-600" />
+                    <XCircle className="h-4 w-4 text-status-error" />
                     Reject Alteration Request
                   </h4>
                   <Button
@@ -497,7 +497,7 @@ export function AdminAlterationDetailsDialog({
                 </p>
                 <div className="space-y-1.5">
                   <Label htmlFor="rejectionInput" className="text-xs font-semibold text-red-900">
-                    Rejection Reason <span className="text-red-600">*</span>
+                    Rejection Reason <span className="text-status-error">*</span>
                   </Label>
                   <Textarea
                     id="rejectionInput"
@@ -511,7 +511,7 @@ export function AdminAlterationDetailsDialog({
                 <div className="flex justify-end">
                   <Button
                     type="button"
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs h-8"
+                    className="bg-status-error hover:bg-red-700 text-white text-xs h-8"
                     disabled={isPending || !rejectionReason.trim()}
                     onClick={() => handleAction("rejected", { rejectionReason })}
                   >
@@ -524,10 +524,10 @@ export function AdminAlterationDetailsDialog({
 
             {/* Start Rework Form Box */}
             {showReworkForm && (
-              <div className="p-4 border border-purple-200 bg-purple-50/60 rounded-lg space-y-3">
+              <div className="p-4 border border-evenvibe-light bg-evenvibe-light/60 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold text-purple-900 flex items-center gap-1.5">
-                    <Play className="h-4 w-4 text-purple-600" />
+                  <h4 className="text-sm font-bold text-evenvibe-deep flex items-center gap-1.5">
+                    <Play className="h-4 w-4 text-evenvibe-primary" />
                     Move to Rework in Progress
                   </h4>
                   <Button
@@ -535,13 +535,13 @@ export function AdminAlterationDetailsDialog({
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowReworkForm(false)}
-                    className="h-7 text-xs text-purple-700"
+                    className="h-7 text-xs text-evenvibe-deep"
                   >
                     Cancel
                   </Button>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="reworkRemarksInput" className="text-xs font-semibold text-purple-900">
+                  <Label htmlFor="reworkRemarksInput" className="text-xs font-semibold text-evenvibe-deep">
                     Rework Remarks (Optional)
                   </Label>
                   <Textarea
@@ -550,13 +550,13 @@ export function AdminAlterationDetailsDialog({
                     value={reworkRemarks}
                     onChange={(e) => setReworkRemarks(e.target.value)}
                     rows={2}
-                    className="bg-white border-purple-300 text-sm"
+                    className="bg-white -evenvibe-primary text-sm"
                   />
                 </div>
                 <div className="flex justify-end">
                   <Button
                     type="button"
-                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs h-8"
+                    className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white text-xs h-8"
                     disabled={isPending}
                     onClick={() => handleAction("rework", { reworkRemarks })}
                   >
@@ -572,7 +572,7 @@ export function AdminAlterationDetailsDialog({
               <div className="p-4 border border-emerald-200 bg-emerald-50/60 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
-                    <Check className="h-4 w-4 text-emerald-600" />
+                    <Check className="h-4 w-4 text-evenvibe-primary" />
                     Mark Rework as Completed
                   </h4>
                   <Button
@@ -580,7 +580,7 @@ export function AdminAlterationDetailsDialog({
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowCompleteForm(false)}
-                    className="h-7 text-xs text-emerald-700"
+                    className="h-7 text-xs text-evenvibe-deep"
                   >
                     Cancel
                   </Button>
@@ -601,7 +601,7 @@ export function AdminAlterationDetailsDialog({
                 <div className="flex justify-end">
                   <Button
                     type="button"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
+                    className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white text-xs h-8"
                     disabled={isPending}
                     onClick={() => handleAction("completed", { completedRemarks })}
                   >
@@ -641,7 +641,7 @@ export function AdminAlterationDetailsDialog({
                       Reject
                     </Button>
                     <Button
-                      className="bg-amber-600 hover:bg-amber-700 text-white"
+                      className="bg-status-warning hover:bg-amber-700 text-white"
                       size="sm"
                       onClick={() => handleAction("under_review")}
                       disabled={isPending}
@@ -669,7 +669,7 @@ export function AdminAlterationDetailsDialog({
                       Reject
                     </Button>
                     <Button
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
                       size="sm"
                       onClick={() => handleAction("approved")}
                       disabled={isPending}
@@ -683,7 +683,7 @@ export function AdminAlterationDetailsDialog({
                 {/* State: Approved -> Start Rework */}
                 {data.status === "approved" && (
                   <Button
-                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                    className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
                     size="sm"
                     onClick={() => {
                       setShowReworkForm(true);
@@ -700,7 +700,7 @@ export function AdminAlterationDetailsDialog({
                 {/* State: Rework -> Mark Completed */}
                 {data.status === "rework" && (
                   <Button
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
                     size="sm"
                     onClick={() => {
                       setShowCompleteForm(true);

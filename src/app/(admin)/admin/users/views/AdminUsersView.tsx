@@ -96,10 +96,10 @@ export function AdminUsersView({
             <CardTitle className="text-sm font-medium text-slate-600">
               Active Users
             </CardTitle>
-            <UserCheck className="h-4 w-4 text-emerald-600" />
+            <UserCheck className="h-4 w-4 text-evenvibe-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-700">
+            <div className="text-2xl font-bold text-evenvibe-deep">
               {kpis.activeUsers}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">Permitted system access</p>
@@ -111,7 +111,7 @@ export function AdminUsersView({
             <CardTitle className="text-sm font-medium text-slate-600">
               Inactive Users
             </CardTitle>
-            <UserX className="h-4 w-4 text-amber-500" />
+            <UserX className="h-4 w-4 text-status-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-700">

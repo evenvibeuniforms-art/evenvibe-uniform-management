@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SizeFormDialog } from "./SizeFormDialog";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 import {
   Users,
   CheckCircle2,
@@ -32,11 +33,17 @@ import { toast } from "sonner";
 interface RequirementStudentSelectionViewProps {
   students: StudentWithSize[];
   configurations: AllConfigItem[];
+  activeOrdersCount?: number;
+  latestActiveOrderNumber?: string | null;
+  latestActiveOrderStatus?: string | null;
 }
 
 export function RequirementStudentSelectionView({
   students,
   configurations,
+  activeOrdersCount,
+  latestActiveOrderNumber,
+  latestActiveOrderStatus,
 }: RequirementStudentSelectionViewProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -286,7 +293,7 @@ export function RequirementStudentSelectionView({
 
         toast.success("Requirement & Order created successfully!");
         setIsConfirmOpen(false);
-        router.refresh();
+        router.push("/school/requirements");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
         setSubmitError(msg);
@@ -308,6 +315,12 @@ export function RequirementStudentSelectionView({
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Link href="/school/orders">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+              <Package className="w-3.5 h-3.5 text-slate-500" />
+              View Orders
+            </Button>
+          </Link>
           <Link href="/school/sizes">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs">
               <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
@@ -317,15 +330,30 @@ export function RequirementStudentSelectionView({
         </div>
       </div>
 
+      {/* Active Orders Banner */}
+      {activeOrdersCount && activeOrdersCount > 0 ? (
+        <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 text-xs sm:text-sm text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Package className="h-4 w-4 text-evenvibe-primary shrink-0" />
+            <span>
+              Your school currently has {activeOrdersCount} active order{activeOrdersCount > 1 ? "s" : ""} in progress (Latest: <strong>{latestActiveOrderNumber}</strong> &mdash; <span className="capitalize font-medium">{latestActiveOrderStatus?.replace("_", " ")}</span>). You can create and submit another independent order below.
+            </span>
+          </div>
+          <Link href="/school/orders" className="text-evenvibe-deep font-semibold hover:underline shrink-0 ml-1">
+            View All Orders &rarr;
+          </Link>
+        </div>
+      ) : null}
+
       {/* Process Banner */}
       <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-4 flex items-start gap-3 text-emerald-950">
-        <Sparkles className="h-5 w-5 mt-0.5 text-emerald-600 shrink-0" />
+        <Sparkles className="h-5 w-5 mt-0.5 text-evenvibe-primary shrink-0" />
         <div className="text-xs sm:text-sm space-y-1">
           <div className="font-semibold text-emerald-900">
             Custom Order Selection
           </div>
           <div className="text-emerald-800 leading-relaxed">
-            Choose exactly which students belong to this new order. Previous delivered orders remain untouched in history. Students who were part of previous orders can be selected again whenever needed.
+            Choose exactly which students belong to this new order. Multiple active orders coexist completely independently. Students who were part of previous orders can be selected again whenever needed.
           </div>
         </div>
       </div>
@@ -334,7 +362,7 @@ export function RequirementStudentSelectionView({
       {selectedIncompleteStudents.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 mt-0.5 text-amber-600 shrink-0" />
+            <AlertCircle className="h-5 w-5 mt-0.5 text-status-warning shrink-0" />
             <div>
               <h3 className="font-semibold text-amber-950 text-base">
                 Action Required: Incomplete Sizes Detected
@@ -374,7 +402,7 @@ export function RequirementStudentSelectionView({
                       variant="ghost"
                       size="sm"
                       onClick={() => handleToggleStudent(student.id)}
-                      className="h-7 text-xs text-slate-500 hover:text-red-600 px-2"
+                      className="h-7 text-xs text-slate-500 hover:text-status-error px-2"
                       title="Remove from this order"
                     >
                       Remove
@@ -409,10 +437,10 @@ export function RequirementStudentSelectionView({
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Sizes Complete
             </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <CheckCircle2 className="h-4 w-4 text-evenvibe-primary" />
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-emerald-600">
+            <div className="text-2xl font-bold text-evenvibe-primary">
               {selectedStudentsList.length - selectedIncompleteStudents.length}
             </div>
             <p className="text-[11px] text-slate-500 mt-0.5">ready for production</p>
@@ -426,14 +454,14 @@ export function RequirementStudentSelectionView({
             </CardTitle>
             <AlertCircle
               className={`h-4 w-4 ${
-                selectedIncompleteStudents.length > 0 ? "text-amber-500" : "text-slate-300"
+                selectedIncompleteStudents.length > 0 ? "text-status-warning" : "text-slate-300"
               }`}
             />
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div
               className={`text-2xl font-bold ${
-                selectedIncompleteStudents.length > 0 ? "text-amber-600" : "text-slate-400"
+                selectedIncompleteStudents.length > 0 ? "text-status-warning" : "text-slate-400"
               }`}
             >
               {selectedIncompleteStudents.length}
@@ -447,7 +475,7 @@ export function RequirementStudentSelectionView({
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Total Order Items
             </CardTitle>
-            <Package className="h-4 w-4 text-blue-500" />
+            <Package className="h-4 w-4 text-status-info" />
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div className="text-2xl font-bold text-blue-600">
@@ -464,7 +492,7 @@ export function RequirementStudentSelectionView({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-emerald-600" />
+                <Layers className="w-4 h-4 text-evenvibe-primary" />
                 Select Students for This Order
               </CardTitle>
               <CardDescription className="text-xs mt-0.5">
@@ -477,7 +505,7 @@ export function RequirementStudentSelectionView({
                 variant={selectedIds.size > 0 ? "default" : "secondary"}
                 className={
                   selectedIds.size > 0
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-xs px-3 py-1 font-semibold"
+                    ? "bg-evenvibe-primary hover:bg-evenvibe-deep text-xs px-3 py-1 font-semibold"
                     : "text-xs px-3 py-1 font-semibold text-slate-500"
                 }
               >
@@ -593,112 +621,210 @@ export function RequirementStudentSelectionView({
               No students match the current filters.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-slate-50/80">
-                  <TableRow>
-                    <TableHead className="w-12 text-center">
-                      <Checkbox
-                        checked={isAllFilteredSelected}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            handleSelectAllFiltered();
-                          } else {
-                            setSelectedIds((prev) => {
-                              const next = new Set(prev);
-                              filteredStudents.forEach((s) => next.delete(s.id));
-                              return next;
-                            });
-                          }
-                        }}
-                        aria-label="Select all matching"
-                      />
-                    </TableHead>
-                    <TableHead className="font-semibold text-slate-700">Student</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Class & Sec</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Adm. No</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Gender</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Size Status</TableHead>
-                    <TableHead className="text-right font-semibold text-slate-700">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredStudents.map((student) => {
-                    const isSelected = selectedIds.has(student.id);
-                    const status = studentStatusMap.get(student.id);
-                    const isComplete = status?.isComplete || false;
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-slate-50/80">
+                    <TableRow>
+                      <TableHead className="w-12 text-center">
+                        <Checkbox
+                          checked={isAllFilteredSelected}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              handleSelectAllFiltered();
+                            } else {
+                              setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                filteredStudents.forEach((s) => next.delete(s.id));
+                                return next;
+                              });
+                            }
+                          }}
+                          aria-label="Select all matching"
+                        />
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">Student</TableHead>
+                      <TableHead className="font-semibold text-slate-700">Class & Sec</TableHead>
+                      <TableHead className="font-semibold text-slate-700">Adm. No</TableHead>
+                      <TableHead className="font-semibold text-slate-700">Gender</TableHead>
+                      <TableHead className="font-semibold text-slate-700">Size Status</TableHead>
+                      <TableHead className="text-right font-semibold text-slate-700">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredStudents.map((student) => {
+                      const isSelected = selectedIds.has(student.id);
+                      const status = studentStatusMap.get(student.id);
+                      const isComplete = status?.isComplete || false;
 
-                    return (
-                      <TableRow
-                        key={student.id}
-                        className={`transition-colors cursor-pointer ${
-                          isSelected ? "bg-emerald-50/40 hover:bg-emerald-50/60" : "hover:bg-slate-50/70"
-                        }`}
-                        onClick={(e) => {
-                          // Prevent toggling if clicked on a button or link
-                          if ((e.target as HTMLElement).closest("button, a")) return;
-                          handleToggleStudent(student.id);
-                        }}
-                      >
-                        <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                      return (
+                        <TableRow
+                          key={student.id}
+                          className={`transition-colors cursor-pointer ${
+                            isSelected ? "bg-emerald-50/40 hover:bg-emerald-50/60" : "hover:bg-slate-50/70"
+                          }`}
+                          onClick={(e) => {
+                            // Prevent toggling if clicked on a button or link
+                            if ((e.target as HTMLElement).closest("button, a")) return;
+                            handleToggleStudent(student.id);
+                          }}
+                        >
+                          <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => handleToggleStudent(student.id)}
+                              aria-label={`Select ${student.student_name}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium text-slate-900">
+                            <div className="flex items-center gap-2">
+                              <span>{student.student_name}</span>
+                              {isSelected && (
+                                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px] px-1.5 py-0">
+                                  Selected
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-slate-600">
+                            {student.class_name} • {student.section || "—"}
+                          </TableCell>
+                          <TableCell className="text-slate-600 font-mono text-xs">
+                            {student.admission_number}
+                          </TableCell>
+                          <TableCell className="text-slate-600 capitalize">
+                            {student.gender || "—"}
+                          </TableCell>
+                          <TableCell>
+                            {isComplete ? (
+                              <Badge className="bg-evenvibe-light text-evenvibe-deep border-emerald-200 text-xs font-normal">
+                                <CheckCircle2 className="w-3 h-3 mr-1 text-evenvibe-primary" />
+                                Complete
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="bg-amber-50 text-amber-800 border-amber-200 text-xs font-normal"
+                              >
+                                <AlertCircle className="w-3 h-3 mr-1 text-status-warning" />
+                                Pending Sizes
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            <SizeFormDialog
+                              student={student}
+                              configurations={configurations}
+                              trigger={
+                                <Button variant="ghost" size="sm" className="h-7 text-xs px-2 text-slate-600">
+                                  Edit Size
+                                </Button>
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 p-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                    <Checkbox
+                      checked={isAllFilteredSelected}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          handleSelectAllFiltered();
+                        } else {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            filteredStudents.forEach((s) => next.delete(s.id));
+                            return next;
+                          });
+                        }
+                      }}
+                      aria-label="Select all matching"
+                    />
+                    <span>Select All Matching ({filteredStudents.length})</span>
+                  </label>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {selectedIds.size} selected
+                  </span>
+                </div>
+
+                {filteredStudents.map((student) => {
+                  const isSelected = selectedIds.has(student.id);
+                  const status = studentStatusMap.get(student.id);
+                  const isComplete = status?.isComplete || false;
+
+                  return (
+                    <MobileCard
+                      key={student.id}
+                      className={`cursor-pointer transition-colors ${
+                        isSelected ? "border-emerald-300 bg-emerald-50/20" : ""
+                      }`}
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest("button, a, input[type='checkbox']")) return;
+                        handleToggleStudent(student.id);
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2 pb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => handleToggleStudent(student.id)}
                             aria-label={`Select ${student.student_name}`}
+                            onClick={(e) => e.stopPropagation()}
                           />
-                        </TableCell>
-                        <TableCell className="font-medium text-slate-900">
-                          <div className="flex items-center gap-2">
-                            <span>{student.student_name}</span>
-                            {isSelected && (
-                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px] px-1.5 py-0">
-                                Selected
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-slate-600">
-                          {student.class_name} • {student.section || "—"}
-                        </TableCell>
-                        <TableCell className="text-slate-600 font-mono text-xs">
-                          {student.admission_number}
-                        </TableCell>
-                        <TableCell className="text-slate-600 capitalize">
-                          {student.gender || "—"}
-                        </TableCell>
-                        <TableCell>
-                          {isComplete ? (
-                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs font-normal">
-                              <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" />
-                              Complete
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="bg-amber-50 text-amber-800 border-amber-200 text-xs font-normal"
-                            >
-                              <AlertCircle className="w-3 h-3 mr-1 text-amber-600" />
-                              Pending Sizes
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <SizeFormDialog
-                            student={student}
-                            configurations={configurations}
-                            trigger={
-                              <Button variant="ghost" size="sm" className="h-7 text-xs px-2 text-slate-600">
-                                Edit Size
-                              </Button>
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                          <span className="font-semibold text-slate-900">{student.student_name}</span>
+                        </div>
+                        {isSelected && (
+                          <Badge className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0 border-0">
+                            Selected
+                          </Badge>
+                        )}
+                      </div>
+
+                      <MobileCardField label="Class & Sec" value={`${student.class_name} • ${student.section || "—"}`} />
+                      <MobileCardField label="Admission Number" value={student.admission_number || "-"} />
+                      <MobileCardField label="Gender" value={student.gender || "—"} />
+                      <MobileCardField label="Size Status">
+                        {isComplete ? (
+                          <Badge className="bg-evenvibe-light text-evenvibe-deep border-emerald-200 text-xs font-normal">
+                            <CheckCircle2 className="w-3 h-3 mr-1 text-evenvibe-primary" />
+                            Complete
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-50 text-amber-800 border-amber-200 text-xs font-normal"
+                          >
+                            <AlertCircle className="w-3 h-3 mr-1 text-status-warning" />
+                            Pending Sizes
+                          </Badge>
+                        )}
+                      </MobileCardField>
+
+                      <MobileCardActions label="Action">
+                        <SizeFormDialog
+                          student={student}
+                          configurations={configurations}
+                          trigger={
+                            <Button variant="outline" size="sm" className="h-8 text-xs px-2.5 text-slate-700">
+                              Edit Size
+                            </Button>
+                          }
+                        />
+                      </MobileCardActions>
+                    </MobileCard>
+                  );
+                })}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -708,7 +834,7 @@ export function RequirementStudentSelectionView({
         <Card className="shadow-sm border-slate-200">
           <CardHeader className="border-b border-slate-100 pb-3">
             <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Package className="w-4 h-4 text-emerald-600" />
+              <Package className="w-4 h-4 text-evenvibe-primary" />
               Calculated Quantity Breakdown (Selected Students Only)
             </CardTitle>
             <CardDescription className="text-xs">
@@ -791,7 +917,7 @@ export function RequirementStudentSelectionView({
               ⚠️ {selectedIncompleteStudents.length} selected student(s) have incomplete sizes. Complete their sizes or unselect them.
             </span>
           ) : (
-            <span className="text-emerald-700 font-medium">
+            <span className="text-evenvibe-deep font-medium">
               ✓ Ready to submit requirement for {selectedIds.size} selected student(s) ({selectedQuantities.totalItems} items).
             </span>
           )}
@@ -804,7 +930,7 @@ export function RequirementStudentSelectionView({
             onClick={() => setIsConfirmOpen(true)}
             className={`w-full sm:w-auto h-11 px-8 font-semibold transition-colors ${
               canSubmit
-                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                ? "bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
                 : "bg-slate-100 text-slate-400 cursor-not-allowed"
             }`}
           >
@@ -832,7 +958,7 @@ export function RequirementStudentSelectionView({
               </div>
               <div>
                 <div className="text-xs text-slate-500 font-medium uppercase">Total Items</div>
-                <div className="text-2xl font-bold text-emerald-600 mt-1">
+                <div className="text-2xl font-bold text-evenvibe-primary mt-1">
                   {selectedQuantities.totalItems}
                 </div>
               </div>
@@ -863,7 +989,7 @@ export function RequirementStudentSelectionView({
               type="button"
               onClick={handleConfirmSubmit}
               disabled={isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-semibold"
             >
               {isPending ? (
                 <>

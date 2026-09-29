@@ -3,21 +3,34 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, UserMinus, Ruler, ClipboardList, Package, FileSpreadsheet, Scissors, BarChart3, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  Users,
+  UserMinus,
+  Ruler,
+  ClipboardList,
+  Package,
+  FileSpreadsheet,
+  Scissors,
+  BarChart3,
+  Settings,
+  Shirt,
+  PackageCheck,
+} from "lucide-react";
 
-type NavItem = {
+export type SchoolNavItem = {
   name: string;
   href: string;
   icon: React.ElementType;
-  active?: boolean;
-  disabled?: boolean;
 };
 
-const navigation: NavItem[] = [
-  { name: "Dashboard", href: "/school", icon: LayoutDashboard, active: true },
+export const schoolNavigation: SchoolNavItem[] = [
+  { name: "Dashboard", href: "/school", icon: LayoutDashboard },
   { name: "Students", href: "/school/students", icon: Users },
+  { name: "Received Students", href: "/school/received-students", icon: PackageCheck },
   { name: "TC Students", href: "/school/tc-students", icon: UserMinus },
   { name: "Import Excel", href: "/school/import", icon: FileSpreadsheet },
+  { name: "Uniform Design", href: "/school/uniform-designs", icon: Shirt },
   { name: "Size Management", href: "/school/sizes", icon: Ruler },
   { name: "Requirements", href: "/school/requirements", icon: ClipboardList },
   { name: "Order Status", href: "/school/orders", icon: Package },
@@ -26,41 +39,44 @@ const navigation: NavItem[] = [
   { name: "Settings", href: "/school/settings", icon: Settings },
 ];
 
-export function SidebarNav() {
+export function isSchoolRouteActive(pathname: string, href: string): boolean {
+  if (href === "/school") {
+    return pathname === "/school";
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+interface SidebarNavProps {
+  onItemClick?: () => void;
+}
+
+export function SidebarNav({ onItemClick }: SidebarNavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex-1 space-y-1 px-2 py-4">
-      {navigation.map((item) => {
-        const isActive = pathname === item.href && !item.disabled;
+    <nav className="flex-1 space-y-1.5 px-2 py-4">
+      {schoolNavigation.map((item) => {
+        const isActive = isSchoolRouteActive(pathname, item.href);
         return (
           <Link
             key={item.name}
-            href={item.disabled ? "#" : item.href}
-            onClick={(e) => item.disabled && e.preventDefault()}
+            href={item.href}
+            onClick={onItemClick}
             className={cn(
               isActive
-                ? "bg-slate-100 text-slate-900"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-              item.disabled && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-slate-600",
-              "group flex items-center px-3 py-2 text-sm font-medium rounded-md"
+                ? "bg-evenvibe-primary text-white shadow-md font-semibold"
+                : "text-emerald-100/70 hover:bg-white/10 hover:text-white",
+              "group flex items-center px-3 py-2.5 text-sm rounded-lg transition-all"
             )}
-            aria-disabled={item.disabled}
           >
             <item.icon
               className={cn(
-                isActive ? "text-slate-900" : "text-slate-400 group-hover:text-slate-600",
-                item.disabled && "group-hover:text-slate-400",
+                isActive ? "text-white" : "text-emerald-100/70 group-hover:text-white",
                 "mr-3 flex-shrink-0 h-5 w-5"
               )}
               aria-hidden="true"
             />
             <span className="flex-1">{item.name}</span>
-            {item.disabled && (
-              <span className="ml-auto inline-block py-0.5 px-2 text-[10px] font-medium tracking-wide text-slate-500 bg-slate-100 rounded-full">
-                Soon
-              </span>
-            )}
           </Link>
         );
       })}

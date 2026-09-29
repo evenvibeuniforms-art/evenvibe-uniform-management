@@ -1,9 +1,5 @@
 import { requireAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { getAdminSchoolLogo } from "@/lib/actions/school-logo";
-import { getAdminUniformDesign } from "@/lib/actions/uniform-designs";
-import { AdminSchoolLogoCard } from "@/components/admin/schools/AdminSchoolLogoCard";
-import { AdminUniformDesignCard } from "@/components/admin/schools/AdminUniformDesignCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,12 +46,6 @@ export default async function AdminSchoolDetailsPage({
     .eq("role", "school_admin")
     .maybeSingle();
 
-  // Fetch school uniform logo and uniform design in parallel
-  const [logoResult, designResult] = await Promise.all([
-    getAdminSchoolLogo(schoolId),
-    getAdminUniformDesign(schoolId),
-  ]);
-
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
       {/* Navigation & Header */}
@@ -77,8 +67,8 @@ export default async function AdminSchoolDetailsPage({
                 variant={school.is_active ? "default" : "secondary"}
                 className={
                   school.is_active
-                    ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                    : "bg-amber-500 hover:bg-amber-600 text-white"
+                    ? "bg-status-success hover:bg-emerald-600 text-white"
+                    : "bg-status-warning hover:bg-status-warning text-white"
                 }
               >
                 {school.is_active ? "Active" : "Pending"}
@@ -91,10 +81,10 @@ export default async function AdminSchoolDetailsPage({
         </div>
 
         <div className="flex items-center gap-3">
-          <Link href={`/admin/schools/${school.id}/uniforms`}>
+          <Link href={`/admin/uniform-designs?schoolId=${school.id}`}>
             <Button className="bg-slate-900 text-white hover:bg-slate-800">
               <Shirt className="h-4 w-4 mr-2" />
-              Configure Uniforms
+              Uniform Designs
             </Button>
           </Link>
         </div>
@@ -172,7 +162,7 @@ export default async function AdminSchoolDetailsPage({
                     </Badge>
                     <span
                       className={`text-xs font-medium ${
-                        adminProfile.is_active ? "text-emerald-600" : "text-amber-600"
+                        adminProfile.is_active ? "text-evenvibe-primary" : "text-status-warning"
                       }`}
                     >
                       {adminProfile.is_active ? "Active" : "Inactive"}
@@ -188,28 +178,6 @@ export default async function AdminSchoolDetailsPage({
           </div>
         </CardContent>
       </Card>
-
-      {/* Visually separate sections for School Uniform Logo and Uniform Design */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Section 1: School Uniform Logo (View + Download) */}
-        <div>
-          <AdminSchoolLogoCard
-            schoolName={school.name}
-            logo={logoResult.logo}
-            signedUrl={logoResult.signedUrl}
-          />
-        </div>
-
-        {/* Section 2: School Uniform Design (Upload + Change + Delete + Download) */}
-        <div>
-          <AdminUniformDesignCard
-            schoolId={school.id}
-            schoolName={school.name}
-            initialDesign={designResult.design}
-            initialSignedUrl={designResult.signedUrl}
-          />
-        </div>
-      </div>
     </div>
   );
 }

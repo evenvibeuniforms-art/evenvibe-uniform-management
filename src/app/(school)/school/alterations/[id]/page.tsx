@@ -76,7 +76,7 @@ export default async function AlterationDetailsPage({
       case "rejected":
         return <Badge className="bg-red-100 text-red-800 uppercase">Rejected</Badge>;
       case "rework":
-        return <Badge className="bg-purple-100 text-purple-800 uppercase">Rework</Badge>;
+        return <Badge className="bg-evenvibe-light text-evenvibe-deep uppercase">Rework</Badge>;
       case "completed":
         return <Badge className="bg-slate-100 text-slate-800 uppercase">Completed</Badge>;
       default:
@@ -134,16 +134,16 @@ export default async function AlterationDetailsPage({
       )}
 
       {alteration.rework_remarks && (
-        <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-          <span className="text-xs font-semibold uppercase text-purple-800 tracking-wider block mb-1">
+        <div className="p-4 bg-evenvibe-light border border-evenvibe-light rounded-lg">
+          <span className="text-xs font-semibold uppercase text-evenvibe-deep tracking-wider block mb-1">
             Rework Instructions / Remarks
           </span>
-          <p className="text-sm text-purple-900">{alteration.rework_remarks}</p>
+          <p className="text-sm text-evenvibe-deep">{alteration.rework_remarks}</p>
         </div>
       )}
 
       {alteration.completed_remarks && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+        <div className="p-4 bg-evenvibe-light border border-emerald-200 rounded-lg">
           <span className="text-xs font-semibold uppercase text-emerald-800 tracking-wider block mb-1">
             Completion Remarks
           </span>
@@ -157,7 +157,7 @@ export default async function AlterationDetailsPage({
           <Card>
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-base flex items-center gap-2">
-                <Scissors className="h-4 w-4 text-emerald-600" />
+                <Scissors className="h-4 w-4 text-evenvibe-primary" />
                 Uniform Item & Issue
               </CardTitle>
             </CardHeader>
@@ -179,7 +179,7 @@ export default async function AlterationDetailsPage({
                 </div>
                 <div>
                   <span className="text-xs text-slate-500 block">Required Size</span>
-                  <span className="font-bold text-emerald-700">{alteration.required_size || "-"}</span>
+                  <span className="font-bold text-evenvibe-deep">{alteration.required_size || "-"}</span>
                 </div>
               </div>
 
@@ -264,7 +264,7 @@ export default async function AlterationDetailsPage({
                   href={signedPhotoUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                  className="inline-flex items-center gap-1 text-xs text-evenvibe-primary hover:text-emerald-700 font-medium"
                 >
                   <Download className="h-3.5 w-3.5" />
                   View Full Image
@@ -298,7 +298,7 @@ export default async function AlterationDetailsPage({
               ) : (
                 history.map((h: HistoryItem, idx: number) => (
                   <div key={h.id || idx} className="flex items-start gap-3 text-sm">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                    <div className="h-2 w-2 rounded-full bg-status-success mt-1.5 shrink-0" />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-slate-900 uppercase text-xs">

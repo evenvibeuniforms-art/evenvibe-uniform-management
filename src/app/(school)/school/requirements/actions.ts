@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireSchoolAdmin } from "@/lib/auth/server";
 import { revalidatePath } from "next/cache";
+import { createAdminNotification } from "@/lib/notifications/adminNotifications";
 
 export type RequirementPreview = {
   totalStudents: number;
@@ -23,6 +24,7 @@ export type RequirementPreview = {
   activeRequirementStatus: string | null;
   activeRequirementNumber: string | null;
   activeOrderNumber: string | null;
+  activeOrdersCount: number;
 };
 
 export async function getRequirementPreview(): Promise<{ preview: RequirementPreview | null; error?: string }> {
@@ -48,8 +50,7 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
       .select("id, order_number, status, requirement_id, requirements(id, requirement_number, status)")
       .eq("school_id", profile.school_id)
       .in("status", ACTIVE_ORDER_STATUSES)
-      .order("created_at", { ascending: false })
-      .limit(1);
+      .order("created_at", { ascending: false });
 
     if (orderError) throw orderError;
 
@@ -57,6 +58,7 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
     let activeRequirementStatus: string | null = null;
     let activeRequirementNumber: string | null = null;
     let activeOrderNumber: string | null = null;
+    const activeOrdersCount = activeOrders?.length || 0;
 
     if (activeOrders && activeOrders.length > 0) {
       const activeOrder = activeOrders[0];
@@ -104,21 +106,30 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
 
     const totalStudents = students?.length || 0;
     let completedSizes = 0;
-    const { data: configs } = await supabase
-      .from("school_uniform_configurations")
-      .select(`
-        gender,
-        items:school_uniform_configuration_items(id, item_name)
-      `)
-      .eq("school_id", profile.school_id);
+    const [configsRes, stylesRes] = await Promise.all([
+      supabase
+        .from("school_uniform_configurations")
+        .select(`
+          gender,
+          items:school_uniform_configuration_items(id, item_name)
+        `)
+        .eq("school_id", profile.school_id),
+      supabase
+        .from("uniform_styles")
+        .select("id, item_name, gender")
+        .eq("school_id", profile.school_id),
+    ]);
 
     const configMap: Record<string, { gender: string, item_name: string }> = {};
-    configs?.forEach(c => {
+    configsRes.data?.forEach(c => {
       if (c.items) {
         c.items.forEach((item: { id: string, item_name: string }) => {
           configMap[item.id] = { gender: c.gender, item_name: item.item_name };
         });
       }
+    });
+    stylesRes.data?.forEach(s => {
+      configMap[s.id] = { gender: s.gender || "All", item_name: s.item_name };
     });
 
     const quantities: RequirementPreview["quantities"] = {
@@ -147,7 +158,7 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
           const mapped = configMap[itemId];
           if (mapped) {
             const { gender, item_name } = mapped;
-            const g = gender as "Male" | "Female";
+            const g = (gender === "All" ? (student.gender || "Male") : gender) as "Male" | "Female";
             if (!quantities[g][item_name]) {
               quantities[g][item_name] = {};
             }
@@ -179,6 +190,7 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
         activeRequirementStatus,
         activeRequirementNumber,
         activeOrderNumber,
+        activeOrdersCount,
       }
     };
   } catch (err) {
@@ -189,7 +201,7 @@ export async function getRequirementPreview(): Promise<{ preview: RequirementPre
 
 export async function submitRequirement(selectedStudentIds?: string[]): Promise<{ success: boolean; requirementId?: string; error?: string }> {
   try {
-    await requireSchoolAdmin();
+    const profile = await requireSchoolAdmin();
     const supabase = await createClient();
 
     if (selectedStudentIds && selectedStudentIds.length === 0) {
@@ -207,6 +219,40 @@ export async function submitRequirement(selectedStudentIds?: string[]): Promise<
     }
 
     if (data && data.success) {
+      // Create automatic Admin notification for the new order
+      if (data.order_id) {
+        const { data: school } = await supabase
+          .from("schools")
+          .select("name")
+          .eq("id", profile.school_id)
+          .single();
+        const schoolName = school?.name || "School";
+        const nowIso = new Date().toISOString();
+
+        try {
+          await createAdminNotification({
+            eventType: "NEW_ORDER",
+            title: "New Order Received",
+            message: `New order ${data.order_number || "Order"} received from ${schoolName}.`,
+            link: `/admin/orders/${data.order_id}`,
+            schoolId: profile.school_id,
+            entityId: data.order_id,
+            idempotencyKey: `NEW_ORDER_${data.order_id}`,
+            notificationType: "order",
+            metadata: {
+              order_id: data.order_id,
+              order_number: data.order_number,
+              school_id: profile.school_id,
+              school_name: schoolName,
+              event_type: "NEW_ORDER",
+              created_at: nowIso,
+            },
+          });
+        } catch (notifErr) {
+          console.warn("Failed to create admin notification for new order:", notifErr);
+        }
+      }
+
       revalidatePath("/school");
       revalidatePath("/school/requirements");
       revalidatePath("/school/orders");

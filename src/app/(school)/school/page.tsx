@@ -1,15 +1,59 @@
 import { requireSchoolAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, ClipboardList, Ruler, Package, BarChart3, ArrowRight, UserPlus, FileSpreadsheet, Truck, FileText } from "lucide-react";
+import {
+  Building2,
+  Users,
+  ClipboardList,
+  Ruler,
+  BarChart3,
+  ArrowRight,
+  UserPlus,
+  FileSpreadsheet,
+  Truck,
+  FileText,
+  Send,
+  PackageSearch,
+  PackageCheck,
+  Scissors
+} from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
-import { getActiveUniformDesign } from "@/lib/actions/uniform-designs";
-import { getSchoolLogo } from "@/lib/actions/school-logo";
-import { UniformDesignCard } from "@/components/dashboard/uniform-design-card";
-import { SchoolLogoCard } from "@/components/dashboard/school-logo-card";
+
 import { ClassSectionProgress, ClassProgressData } from "@/components/school/ClassSectionProgress";
 import { SchoolDashboardRealtime } from "@/components/school/SchoolDashboardRealtime";
+
+function getWorkflowBadgeStyle(badge: string) {
+  switch (badge.toLowerCase()) {
+    case "completed":
+      return "bg-evenvibe-light text-evenvibe-deep border-emerald-200";
+    case "in progress":
+    case "ready":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    case "submitted":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+    case "available":
+      return "bg-sky-50 text-sky-700 border-sky-200";
+    default:
+      return "bg-slate-50 text-slate-500 border-slate-200";
+  }
+}
+
+function getWorkflowMetricStyle(badge: string) {
+  switch (badge.toLowerCase()) {
+    case "completed":
+      return "text-evenvibe-primary";
+    case "in progress":
+    case "ready":
+      return "text-status-warning";
+    case "submitted":
+      return "text-blue-600";
+    case "available":
+      return "text-status-info";
+    default:
+      return "text-slate-500";
+  }
+}
 
 export default async function SchoolDashboard() {
   const profile = await requireSchoolAdmin();
@@ -22,8 +66,8 @@ export default async function SchoolDashboard() {
     studentsRes,
     requirementRes,
     orderRes,
-    designRes,
-    logoRes,
+    alterationsRes,
+    deliveredOrdersRes,
   ] = await Promise.all([
     supabase
       .from("schools")
@@ -49,13 +93,20 @@ export default async function SchoolDashboard() {
       .maybeSingle(),
     supabase
       .from("orders")
-      .select("order_number, status")
+      .select("id, order_number, status, tracking_number, courier_name, delivered_at, shipped_at, created_at")
       .eq("school_id", profile.school_id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    getActiveUniformDesign(),
-    getSchoolLogo(),
+    supabase
+      .from("alteration_requests")
+      .select("id, status")
+      .eq("school_id", profile.school_id),
+    supabase
+      .from("orders")
+      .select("id, status")
+      .eq("school_id", profile.school_id)
+      .in("status", ["delivered", "dispatched", "in_transit", "packed"]),
   ]);
 
   const school = schoolRes.data;
@@ -116,7 +167,6 @@ export default async function SchoolDashboard() {
   });
 
   const pendingSizesCount = totalStudents - completedSizes;
-  const progressPercentage = totalStudents ? Math.round((completedSizes / totalStudents) * 100) : 0;
 
   // Calculate percentages for class data and sort
   const classProgressData = Array.from(classProgressMap.values()).map(data => {
@@ -132,8 +182,161 @@ export default async function SchoolDashboard() {
   const requirementStatus = requirementData?.status || "Pending Sizes";
   const orderData = orderRes.data;
   const orderStatus = orderData?.status || "Not Created";
-  const { design: activeDesign, signedUrl: activeDesignSignedUrl } = designRes;
-  const { logo: schoolLogo, signedUrl: schoolLogoSignedUrl } = logoRes;
+
+  // Data computations for 9-step workflow
+  const isAllSizesCollected = totalStudents > 0 && completedSizes === totalStudents;
+  const isRequirementSubmitted = Boolean(
+    requirementData?.submitted_at || 
+    ['submitted', 'approved', 'converted_to_order'].includes(requirementData?.status || '')
+  );
+
+  const isDelivered = orderData?.status === "delivered";
+  const isShipping = orderData?.status === "dispatched" || orderData?.status === "in_transit";
+  const isPacked = orderData?.status === "packed";
+
+  // Delivered and received students calculation
+  const deliveredOrderIds = (deliveredOrdersRes.data || []).map((o) => o.id);
+  let receivedStudentsCount = 0;
+  if (deliveredOrderIds.length > 0) {
+    const { data: delItems } = await supabase
+      .from("order_delivery_student_items")
+      .select("student_id")
+      .in("order_id", deliveredOrderIds);
+
+    if (delItems && delItems.length > 0) {
+      const uniqueStudents = new Set((delItems as Array<{ student_id: string }>).map((item) => item.student_id));
+      receivedStudentsCount = uniqueStudents.size;
+    }
+  }
+
+  // Alterations calculation
+  const alterations = alterationsRes.data || [];
+  const totalAlterations = alterations.length;
+  const pendingAlterations = alterations.filter((a) =>
+    ["requested", "under_review", "approved_rework"].includes(a.status)
+  ).length;
+
+  const workflowSteps = [
+    {
+      number: 1,
+      title: "Students",
+      subtitle: "Add / Import & Manage",
+      route: "/school/students",
+      icon: Users,
+      description: `${totalStudents} Student${totalStudents === 1 ? "" : "s"}`,
+      badge: totalStudents > 0 ? "Completed" : "Pending",
+    },
+    {
+      number: 2,
+      title: "Size Collection",
+      subtitle: "Collect Student Sizes",
+      route: "/school/sizes",
+      icon: Ruler,
+      description: `${completedSizes} / ${totalStudents}`,
+      badge: isAllSizesCollected ? "Completed" : completedSizes > 0 ? "In Progress" : "Pending",
+    },
+    {
+      number: 3,
+      title: "Uniform Requirement",
+      subtitle: "Prepare & Review Requirement",
+      route: "/school/requirements",
+      icon: ClipboardList,
+      description: requirementData
+        ? requirementData.status.replace(/_/g, " ")
+        : isAllSizesCollected
+          ? "Ready to Prepare"
+          : "Pending Sizes",
+      badge: requirementData ? "Completed" : isAllSizesCollected ? "Ready" : "Pending",
+    },
+    {
+      number: 4,
+      title: "Submit Order",
+      subtitle: "Submit Uniform Order",
+      route: "/school/requirements",
+      icon: Send,
+      description: isRequirementSubmitted
+        ? "Submitted"
+        : requirementData
+          ? "Ready to Submit"
+          : "Pending Requirement",
+      badge: isRequirementSubmitted ? "Completed" : requirementData ? "Ready" : "Pending",
+    },
+    {
+      number: 5,
+      title: "Order Tracking",
+      subtitle: "Track Order Progress",
+      route: "/school/orders",
+      icon: PackageSearch,
+      description: orderData ? orderData.status.replace(/_/g, " ") : "Not Created",
+      badge: orderData
+        ? ["delivered", "in_transit", "dispatched", "packed", "quality_check", "production", "confirmed"].includes(orderData.status)
+          ? "In Progress"
+          : "Submitted"
+        : "Pending",
+    },
+    {
+      number: 6,
+      title: "Delivery",
+      subtitle: "View Delivery Details",
+      route: "/school/orders",
+      icon: Truck,
+      description: isDelivered
+        ? "Delivered"
+        : isShipping
+          ? "In Transit"
+          : isPacked
+            ? "Packed"
+            : orderData
+              ? "Awaiting Dispatch"
+              : "No Active Order",
+      badge: isDelivered ? "Completed" : isShipping || isPacked ? "In Progress" : "Pending",
+    },
+    {
+      number: 7,
+      title: "Received Students",
+      subtitle: "Mark Dress Received",
+      route: "/school/received-students",
+      icon: PackageCheck,
+      description: receivedStudentsCount > 0
+        ? `${receivedStudentsCount} Received`
+        : isDelivered || deliveredOrderIds.length > 0
+          ? "Ready to Mark"
+          : "Awaiting Delivery",
+      badge: receivedStudentsCount > 0
+        ? "Completed"
+        : isDelivered || deliveredOrderIds.length > 0
+          ? "Available"
+          : "Pending",
+    },
+    {
+      number: 8,
+      title: "Alterations",
+      subtitle: "Request & Track Alterations",
+      route: "/school/alterations",
+      icon: Scissors,
+      description: totalAlterations > 0
+        ? `${totalAlterations} Request${totalAlterations === 1 ? "" : "s"}`
+        : isDelivered || receivedStudentsCount > 0
+          ? "Available"
+          : "Awaiting Delivery",
+      badge: totalAlterations > 0
+        ? pendingAlterations > 0
+          ? "In Progress"
+          : "Completed"
+        : isDelivered || receivedStudentsCount > 0
+          ? "Available"
+          : "Pending",
+    },
+    {
+      number: 9,
+      title: "Reports",
+      subtitle: "View School Reports",
+      route: "/school/reports",
+      icon: BarChart3,
+      description: "Analytics & Insights",
+      badge: "Available",
+    },
+  ];
 
   return (
     <div className="space-y-8 pb-10">
@@ -149,7 +352,7 @@ export default async function SchoolDashboard() {
         </div>
         <div className="flex flex-col sm:items-end">
           <span className="text-sm font-medium text-slate-500 uppercase tracking-wider">School Code</span>
-          <span className="text-lg font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-md mt-1 border border-emerald-100">
+          <span className="text-lg font-bold text-evenvibe-primary bg-evenvibe-light px-3 py-1 rounded-md mt-1 border border-emerald-100">
             {school.school_code}
           </span>
         </div>
@@ -167,21 +370,21 @@ export default async function SchoolDashboard() {
         <Card className="shadow-sm border-slate-200">
           <CardContent className="p-4 flex flex-col justify-center items-center text-center">
             <span className="text-xs font-medium text-slate-500 uppercase">Active Students</span>
-            <span className="text-2xl font-bold text-emerald-600 mt-1">{activeStudents}</span>
+            <span className="text-2xl font-bold text-evenvibe-primary mt-1">{activeStudents}</span>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-slate-200">
           <CardContent className="p-4 flex flex-col justify-center items-center text-center">
             <span className="text-xs font-medium text-slate-500 uppercase">Sizes Collected</span>
-            <span className="text-2xl font-bold text-emerald-600 mt-1">{completedSizes}</span>
+            <span className="text-2xl font-bold text-evenvibe-primary mt-1">{completedSizes}</span>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-slate-200">
           <CardContent className="p-4 flex flex-col justify-center items-center text-center">
             <span className="text-xs font-medium text-slate-500 uppercase">Sizes Pending</span>
-            <span className="text-2xl font-bold text-amber-500 mt-1">{pendingSizesCount}</span>
+            <span className="text-2xl font-bold text-status-warning mt-1">{pendingSizesCount}</span>
           </CardContent>
         </Card>
 
@@ -213,7 +416,7 @@ export default async function SchoolDashboard() {
             <Link href="/school/import" className={buttonVariants({ variant: "outline", size: "sm" })}>
               <FileSpreadsheet className="h-4 w-4 mr-2" /> Import Excel
             </Link>
-            <Link href="/school/sizes" className={buttonVariants({ variant: "default", size: "sm", className: "bg-emerald-600 hover:bg-emerald-700" })}>
+            <Link href="/school/sizes" className={buttonVariants({ variant: "default", size: "sm", className: "bg-evenvibe-primary hover:bg-evenvibe-deep" })}>
               <Ruler className="h-4 w-4 mr-2" /> Collect Sizes
             </Link>
             <Link href="/school/requirements" className={buttonVariants({ variant: "outline", size: "sm" })}>
@@ -235,93 +438,44 @@ export default async function SchoolDashboard() {
           <CardTitle className="text-lg">Uniform Management Workflow</CardTitle>
           <CardDescription>Follow these steps to complete your school&apos;s uniform order</CardDescription>
         </CardHeader>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 relative">
-            
-            {/* Step 1: Students */}
-            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</div>
-                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Students</h3>
-              </div>
-              <p className="text-sm font-semibold text-slate-800 mb-1">Add / Import</p>
-              <div className="mt-auto pt-2 border-t border-slate-100">
-                <span className="text-xs font-medium text-emerald-600 flex items-center">
-                  <Users className="w-3.5 h-3.5 mr-1" /> {totalStudents} Students
-                </span>
-              </div>
-            </div>
+        <CardContent className="p-4 sm:p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {workflowSteps.map((step) => {
+              const StepIcon = step.icon;
+              return (
+                <Link
+                  key={step.number}
+                  href={step.route}
+                  className="bg-evenvibe-surface rounded-2xl p-4 sm:p-5 border border-evenvibe-border shadow-sm relative flex flex-col h-full hover:border-evenvibe-primary hover:shadow-md transition-all group focus:outline-none focus:ring-2 focus:ring-evenvibe-primary focus:ring-offset-2"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="bg-evenvibe-light text-evenvibe-deep w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 group-hover:bg-evenvibe-primary group-hover:text-white transition-colors">
+                        {String(step.number).padStart(2, '0')}
+                      </div>
+                      <h3 className="font-bold text-xs text-evenvibe-text uppercase tracking-wider">
+                        {step.title}
+                      </h3>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-evenvibe-muted group-hover:text-evenvibe-primary group-hover:translate-x-0.5 transition-all" />
+                  </div>
 
-            {/* Step 2: Class & Section */}
-            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</div>
-                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Classes</h3>
-              </div>
-              <p className="text-sm font-semibold text-slate-800 mb-1">Select & Manage</p>
-              <div className="mt-auto pt-2 border-t border-slate-100">
-                <span className="text-xs font-medium text-slate-600 flex items-center">
-                  <Building2 className="w-3.5 h-3.5 mr-1" /> {classProgressData.length} Classes
-                </span>
-              </div>
-            </div>
+                  <p className="text-[13px] font-medium text-evenvibe-muted mb-4 group-hover:text-evenvibe-deep transition-colors">
+                    {step.subtitle}
+                  </p>
 
-            {/* Step 3: Size Collection */}
-            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</div>
-                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Sizes</h3>
-              </div>
-              <p className="text-sm font-semibold text-slate-800 mb-1">Collect Sizes</p>
-              <div className="mt-auto pt-2 border-t border-slate-100">
-                <span className={`text-xs font-medium flex items-center ${progressPercentage === 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                  <Ruler className="w-3.5 h-3.5 mr-1" /> {completedSizes} / {totalStudents}
-                </span>
-              </div>
-            </div>
-
-            {/* Step 4: Requirement */}
-            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">4</div>
-                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Requirement</h3>
-              </div>
-              <p className="text-sm font-semibold text-slate-800 mb-1">Review & Submit</p>
-              <div className="mt-auto pt-2 border-t border-slate-100">
-                <span className={`text-xs font-medium flex items-center capitalize ${requirementData ? 'text-emerald-600' : 'text-slate-500'}`}>
-                  <ClipboardList className="w-3.5 h-3.5 mr-1" /> {requirementStatus.replace("_", " ")}
-                </span>
-              </div>
-            </div>
-
-            {/* Step 5: Order */}
-            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">5</div>
-                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Order</h3>
-              </div>
-              <p className="text-sm font-semibold text-slate-800 mb-1">Track Status</p>
-              <div className="mt-auto pt-2 border-t border-slate-100">
-                <span className={`text-xs font-medium flex items-center capitalize ${orderData ? 'text-emerald-600' : 'text-slate-500'}`}>
-                  <Package className="w-3.5 h-3.5 mr-1" /> {orderStatus.replace("_", " ")}
-                </span>
-              </div>
-            </div>
-
-            {/* Step 6: Reports */}
-            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm relative flex flex-col h-full">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">6</div>
-                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Reports</h3>
-              </div>
-              <p className="text-sm font-semibold text-slate-800 mb-1">View Insights</p>
-              <div className="mt-auto pt-2 border-t border-slate-100">
-                <span className="text-xs font-medium text-slate-600 flex items-center">
-                  <BarChart3 className="w-3.5 h-3.5 mr-1" /> Analytics
-                </span>
-              </div>
-            </div>
-            
+                  <div className="mt-auto pt-3 border-t border-evenvibe-border flex items-center justify-between gap-2">
+                    <span className={`text-xs font-medium flex items-center capitalize truncate ${getWorkflowMetricStyle(step.badge)}`}>
+                      <StepIcon className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+                      <span className="truncate">{step.description}</span>
+                    </span>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${getWorkflowBadgeStyle(step.badge)}`}>
+                      {step.badge}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -344,11 +498,11 @@ export default async function SchoolDashboard() {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                     <span className="text-sm text-slate-600">Total Completed</span>
-                    <span className="text-sm font-bold text-emerald-600">{completedSizes}</span>
+                    <span className="text-sm font-bold text-evenvibe-primary">{completedSizes}</span>
                   </div>
                   <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                     <span className="text-sm text-slate-600">Total Pending</span>
-                    <span className="text-sm font-bold text-amber-500">{pendingSizesCount}</span>
+                    <span className="text-sm font-bold text-status-warning">{pendingSizesCount}</span>
                   </div>
                   <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                     <span className="text-sm text-slate-600">Regular Uniform</span>
@@ -421,7 +575,7 @@ export default async function SchoolDashboard() {
                   
                   <Link 
                     href="/school/orders"
-                    className="flex w-full items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-md hover:bg-emerald-100 transition-colors"
+                    className="flex w-full items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-evenvibe-primary bg-evenvibe-light border border-emerald-100 rounded-md hover:bg-emerald-100 transition-colors"
                   >
                     Track Order Progress <ArrowRight className="h-4 w-4" />
                   </Link>
@@ -436,19 +590,7 @@ export default async function SchoolDashboard() {
             </CardContent>
           </Card>
 
-          {/* SCHOOL UNIFORM LOGO CARD */}
-          <SchoolLogoCard
-            schoolName={school.name}
-            logo={schoolLogo}
-            signedUrl={schoolLogoSignedUrl}
-          />
 
-          {/* UNIFORM DESIGN CARD */}
-          <UniformDesignCard 
-            schoolName={school.name} 
-            design={activeDesign} 
-            signedUrl={activeDesignSignedUrl} 
-          />
         </div>
       </div>
     </div>

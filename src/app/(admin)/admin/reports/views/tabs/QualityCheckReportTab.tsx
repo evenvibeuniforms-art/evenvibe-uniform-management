@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ClipboardCheck } from "lucide-react";
 import { QualityCheckReportRow, PaginatedResult, GlobalReportFilters } from "../../types";
 import { ExportReportButton } from "../components/ExportReportButton";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 
 interface QualityCheckReportTabProps {
   report: PaginatedResult<QualityCheckReportRow>;
@@ -42,10 +43,10 @@ export function QualityCheckReportTab({ report, filters, onPageChange }: Quality
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
-      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
+      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-            <ClipboardCheck className="h-4 w-4 text-purple-600" />
+            <ClipboardCheck className="h-4 w-4 text-evenvibe-primary" />
             Quality Check & Inspection Report ({totalCount})
           </CardTitle>
           <CardDescription className="text-xs mt-0.5">
@@ -54,7 +55,9 @@ export function QualityCheckReportTab({ report, filters, onPageChange }: Quality
         </div>
         <ExportReportButton tabName="quality_check" tabLabel="Quality Check Report" filters={filters} />
       </CardHeader>
-      <div className="overflow-x-auto">
+
+      {/* Desktop Table View (>= 768px) */}
+      <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
@@ -86,10 +89,10 @@ export function QualityCheckReportTab({ report, filters, onPageChange }: Quality
                   </TableCell>
                   <TableCell className="text-center text-slate-900 text-xs font-semibold">{q.totalQuantity}</TableCell>
                   <TableCell className="text-center text-slate-800 text-xs font-medium">{q.checkedQuantity}</TableCell>
-                  <TableCell className="text-center text-emerald-700 text-xs font-bold">{q.passedQuantity}</TableCell>
+                  <TableCell className="text-center text-evenvibe-deep text-xs font-bold">{q.passedQuantity}</TableCell>
                   <TableCell className="text-center text-rose-700 text-xs font-bold">{q.defectiveQuantity}</TableCell>
                   <TableCell className="text-center text-xs font-semibold">
-                    <span className={q.defectRate > 0 ? "text-rose-600" : "text-emerald-600"}>
+                    <span className={q.defectRate > 0 ? "text-status-error" : "text-evenvibe-primary"}>
                       {q.defectRate.toFixed(2)}%
                     </span>
                   </TableCell>
@@ -107,10 +110,48 @@ export function QualityCheckReportTab({ report, filters, onPageChange }: Quality
         </Table>
       </div>
 
+      {/* Mobile Card View (< 768px) */}
+      <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+        {data.length === 0 ? (
+          <div className="text-center py-8 text-xs text-slate-500 bg-white rounded-lg border border-slate-200">
+            No quality check records found matching the selected filters.
+          </div>
+        ) : (
+          data.map((q) => (
+            <MobileCard key={q.orderId}>
+              <MobileCardField label="Order Number" value={<span className="font-mono font-semibold">{q.orderNumber}</span>} />
+              <MobileCardField label="School" value={q.schoolName} />
+              <MobileCardField label="Total Qty" value={q.totalQuantity} />
+              <MobileCardField label="Checked Qty" value={q.checkedQuantity} />
+              <MobileCardField label="Passed Qty" value={<span className="text-evenvibe-deep font-bold">{q.passedQuantity}</span>} />
+              <MobileCardField label="Defective Qty" value={<span className="text-rose-700 font-bold">{q.defectiveQuantity}</span>} />
+              <MobileCardField
+                label="Defect Rate"
+                value={
+                  <span className={`font-semibold ${q.defectRate > 0 ? "text-status-error" : "text-evenvibe-primary"}`}>
+                    {q.defectRate.toFixed(2)}%
+                  </span>
+                }
+              />
+              <MobileCardField
+                label="QC Status"
+                value={
+                  <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${getQCBadge(q.status)}`}>
+                    {q.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </Badge>
+                }
+              />
+              <MobileCardField label="Started Date" value={formatDate(q.startedAt)} />
+              <MobileCardField label="Completed Date" value={formatDate(q.completedAt)} />
+            </MobileCard>
+          ))
+        )}
+      </div>
+
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
-          <p className="text-xs text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3 border-t bg-slate-50/50">
+          <p className="text-xs text-muted-foreground text-center sm:text-left">
             Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} records
           </p>
           <div className="flex items-center gap-1">

@@ -142,7 +142,7 @@ export function SchoolNotificationBell({
         >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white shadow">
+            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-evenvibe-primary text-[10px] font-bold text-white shadow">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
@@ -163,7 +163,7 @@ export function SchoolNotificationBell({
                 <button
                   onClick={handleMarkAllRead}
                   disabled={isPending}
-                  className="text-xs text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1"
+                  className="text-xs text-evenvibe-deep hover:text-emerald-800 font-medium flex items-center gap-1"
                 >
                   <CheckCheck className="h-3.5 w-3.5" />
                   Mark all read
@@ -189,7 +189,7 @@ export function SchoolNotificationBell({
                 >
                   <div className="pt-0.5">
                     {!notif.is_read ? (
-                      <Circle className="h-2 w-2 fill-emerald-600 text-emerald-600" />
+                      <Circle className="h-2 w-2 fill-emerald-600 text-evenvibe-primary" />
                     ) : (
                       <Circle className="h-2 w-2 text-transparent" />
                     )}

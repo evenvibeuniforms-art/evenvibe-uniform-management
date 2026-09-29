@@ -1,15 +1,11 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { School, User, MapPin, Phone, Mail, Calendar, Loader2 } from "lucide-react";
 import { approveSchool, rejectSchool } from "@/app/(admin)/admin/schools/actions";
-import { getAdminSchoolLogo, SchoolLogoResult } from "@/lib/actions/school-logo";
-import { getAdminUniformDesign, ActiveUniformDesignResult } from "@/lib/actions/uniform-designs";
-import { AdminSchoolLogoCard } from "./AdminSchoolLogoCard";
-import { AdminUniformDesignCard } from "./AdminUniformDesignCard";
 import Link from "next/link";
 
 interface SchoolDetails {
@@ -46,42 +42,6 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [logoState, setLogoState] = useState<{ schoolId: string | null; result: SchoolLogoResult | null }>({
-    schoolId: null,
-    result: null,
-  });
-  const [designState, setDesignState] = useState<{ schoolId: string | null; result: ActiveUniformDesignResult | null }>({
-    schoolId: null,
-    result: null,
-  });
-
-  const isLoadingAssets = open && !!school?.id && (logoState.schoolId !== school.id || designState.schoolId !== school.id);
-  const logoData = school?.id && logoState.schoolId === school.id ? logoState.result : null;
-  const designData = school?.id && designState.schoolId === school.id ? designState.result : null;
-
-  useEffect(() => {
-    let isCancelled = false;
-    if (!open || !school?.id) return;
-
-    const currentSchoolId = school.id;
-    Promise.all([
-      getAdminSchoolLogo(currentSchoolId),
-      getAdminUniformDesign(currentSchoolId),
-    ])
-      .then(([logoRes, designRes]) => {
-        if (!isCancelled) {
-          setLogoState({ schoolId: currentSchoolId, result: logoRes });
-          setDesignState({ schoolId: currentSchoolId, result: designRes });
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load school assets for admin:", err);
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [open, school?.id]);
 
   if (!school) return null;
 
@@ -124,117 +84,97 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
         setTimeout(() => { setError(null); setSuccess(null); }, 300);
       }
     }}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between pr-6">
-            <DialogTitle className="text-2xl flex items-center gap-2">
-              <School className="h-6 w-6" />
+            <DialogTitle className="text-xl sm:text-2xl flex items-center gap-2">
+              <School className="h-6 w-6 text-slate-700" />
               {school.name}
             </DialogTitle>
-            <Badge variant={school.is_active ? "default" : "secondary"} className={school.is_active ? "bg-emerald-500 hover:bg-emerald-600" : "bg-amber-500 hover:bg-amber-600 text-white"}>
+            <Badge variant={school.is_active ? "default" : "secondary"} className={school.is_active ? "bg-status-success hover:bg-emerald-600" : "bg-status-warning hover:bg-status-warning text-white"}>
               {school.is_active ? "Active" : "Pending"}
             </Badge>
           </div>
           <DialogDescription>
-            Code: {school.school_code}
+            School Code: <span className="font-mono font-medium text-slate-700">{school.school_code}</span>
           </DialogDescription>
         </DialogHeader>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm font-medium border border-red-200">
+          <div className="bg-red-50 text-status-error p-3 rounded-md text-sm font-medium border border-red-200">
             {error}
           </div>
         )}
         
         {success && (
-          <div className="bg-emerald-50 text-emerald-600 p-3 rounded-md text-sm font-medium border border-emerald-200">
+          <div className="bg-evenvibe-light text-evenvibe-primary p-3 rounded-md text-sm font-medium border border-emerald-200">
             {success}
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6 py-2">
+        <div className="grid md:grid-cols-2 gap-4 py-2">
+          {/* Left Column: Address & Registration */}
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-2">
-                <MapPin className="h-4 w-4 text-slate-500" />
+              <h3 className="text-xs font-semibold uppercase text-slate-500 flex items-center gap-1.5 mb-1.5">
+                <MapPin className="h-3.5 w-3.5 text-slate-400" />
                 School Address
               </h3>
-              <div className="text-sm text-slate-600 space-y-1 bg-slate-50 p-3 rounded-md">
-                <p>{school.address}</p>
+              <div className="text-sm text-slate-600 space-y-0.5 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <p className="font-medium text-slate-800">{school.address}</p>
                 <p>{school.city}, {school.district}</p>
                 <p>{school.state} - {school.pincode}</p>
               </div>
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-2">
-                <Calendar className="h-4 w-4 text-slate-500" />
+              <h3 className="text-xs font-semibold uppercase text-slate-500 flex items-center gap-1.5 mb-1.5">
+                <Calendar className="h-3.5 w-3.5 text-slate-400" />
                 Registration Info
               </h3>
-              <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-md">
-                <p>Created: {new Date(school.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</p>
+              <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <p>Registered: <span className="font-medium text-slate-800">{new Date(school.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</span></p>
               </div>
             </div>
           </div>
 
+          {/* Right Column: Contact & Admin */}
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-2">
-                <Phone className="h-4 w-4 text-slate-500" />
+              <h3 className="text-xs font-semibold uppercase text-slate-500 flex items-center gap-1.5 mb-1.5">
+                <Phone className="h-3.5 w-3.5 text-slate-400" />
                 Contact Person
               </h3>
-              <div className="text-sm text-slate-600 space-y-1 bg-slate-50 p-3 rounded-md">
+              <div className="text-sm text-slate-600 space-y-1 bg-slate-50 p-3 rounded-lg border border-slate-100">
                 <p className="font-medium text-slate-900">{school.contact_name}</p>
-                <p className="flex items-center gap-2"><Mail className="h-3 w-3" /> {school.contact_email}</p>
-                <p className="flex items-center gap-2"><Phone className="h-3 w-3" /> {school.contact_phone}</p>
+                <p className="flex items-center gap-2 text-xs"><Mail className="h-3.5 w-3.5 text-slate-400" /> {school.contact_email}</p>
+                <p className="flex items-center gap-2 text-xs"><Phone className="h-3.5 w-3.5 text-slate-400" /> {school.contact_phone}</p>
               </div>
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-2">
-                <User className="h-4 w-4 text-slate-500" />
+              <h3 className="text-xs font-semibold uppercase text-slate-500 flex items-center gap-1.5 mb-1.5">
+                <User className="h-3.5 w-3.5 text-slate-400" />
                 School Admin Account
               </h3>
-              <div className="text-sm text-slate-600 space-y-1 bg-slate-50 p-3 rounded-md">
+              <div className="text-sm text-slate-600 space-y-1.5 bg-slate-50 p-3 rounded-lg border border-slate-100">
                 {adminProfile ? (
                   <>
                     <p className="font-medium text-slate-900">{adminProfile.full_name || 'No Name Provided'}</p>
-                    <p>Role: <Badge variant="outline" className="text-xs">{adminProfile.role}</Badge></p>
-                    <p>Status: <span className={adminProfile.is_active ? "text-emerald-600 font-medium" : "text-amber-600 font-medium"}>{adminProfile.is_active ? "Active" : "Inactive"}</span></p>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span>Role: <Badge variant="outline" className="text-[10px] font-medium">{adminProfile.role}</Badge></span>
+                      <span>Status: <span className={adminProfile.is_active ? "text-evenvibe-primary font-semibold" : "text-status-warning font-semibold"}>{adminProfile.is_active ? "Active" : "Inactive"}</span></span>
+                    </div>
                   </>
                 ) : (
-                  <p className="italic text-slate-500">No school admin profile found.</p>
+                  <p className="italic text-slate-500 text-xs">No school admin profile found.</p>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* School Assets Section: School Uniform Logo & Uniform Design */}
-        <div className="border-t border-slate-200 pt-4 pb-2">
-          {isLoadingAssets ? (
-            <div className="w-full h-36 rounded-lg border border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-slate-400">
-              <Loader2 className="h-5 w-5 animate-spin mb-2" />
-              <p className="text-xs">Loading school assets...</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <AdminSchoolLogoCard
-                schoolName={school.name}
-                logo={logoData?.logo || null}
-                signedUrl={logoData?.signedUrl || null}
-              />
-              <AdminUniformDesignCard
-                schoolId={school.id}
-                schoolName={school.name}
-                initialDesign={designData?.design || null}
-                initialSignedUrl={designData?.signedUrl || null}
-              />
-            </div>
-          )}
-        </div>
-
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2 sm:gap-0 pt-3 border-t border-slate-100">
           {!school.is_active ? (
             <>
               <Button 
@@ -246,7 +186,7 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
                 Reject Registration
               </Button>
               <Button 
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
                 onClick={handleApprove}
                 disabled={isPending}
               >
@@ -255,7 +195,7 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
               </Button>
             </>
           ) : (
-            <>
+            <div className="flex items-center justify-end gap-2 w-full">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Close
               </Button>
@@ -264,12 +204,12 @@ export function SchoolDetailsDialog({ school, adminProfile, open, onOpenChange }
                   View Page
                 </Button>
               </Link>
-              <Link href={`/admin/schools/${school.id}/uniforms`} passHref>
+              <Link href={`/admin/uniform-designs?schoolId=${school.id}`} passHref>
                 <Button className="bg-slate-900 text-white hover:bg-slate-800">
-                  Configure Uniforms
+                  Uniform Designs
                 </Button>
               </Link>
-            </>
+            </div>
           )}
         </DialogFooter>
       </DialogContent>

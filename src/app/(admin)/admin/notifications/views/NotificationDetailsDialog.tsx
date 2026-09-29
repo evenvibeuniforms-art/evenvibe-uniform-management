@@ -57,7 +57,7 @@ export function NotificationDetailsDialog({
       case "published":
         return (
           <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-            <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" /> Published
+            <CheckCircle2 className="h-3 w-3 mr-1 text-evenvibe-primary" /> Published
           </Badge>
         );
       case "scheduled":
@@ -81,7 +81,7 @@ export function NotificationDetailsDialog({
       case "cancelled":
         return (
           <Badge variant="outline" className="bg-rose-100 text-rose-700 border-rose-200">
-            <Ban className="h-3 w-3 mr-1 text-rose-500" /> Cancelled
+            <Ban className="h-3 w-3 mr-1 text-status-error" /> Cancelled
           </Badge>
         );
     }
@@ -149,7 +149,7 @@ export function NotificationDetailsDialog({
             {notification.targetType === "all_schools" ? (
               <div className="rounded-md border bg-slate-50 p-3 text-sm flex items-center justify-between">
                 <span className="font-semibold text-slate-900">All Registered Schools</span>
-                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                <Badge variant="outline" className="bg-evenvibe-light text-evenvibe-deep border-emerald-200">
                   Global Broadcast
                 </Badge>
               </div>
@@ -208,7 +208,7 @@ export function NotificationDetailsDialog({
               {notification.publishedAt && (
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Published At
+                    <CheckCircle2 className="h-3 w-3 text-evenvibe-primary" /> Published At
                   </span>
                   <span className="font-medium text-emerald-800">{formatDate(notification.publishedAt)}</span>
                 </div>
@@ -226,7 +226,7 @@ export function NotificationDetailsDialog({
               {notification.cancelledAt && (
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 flex items-center gap-1.5">
-                    <Ban className="h-3 w-3 text-rose-500" /> Cancelled At
+                    <Ban className="h-3 w-3 text-status-error" /> Cancelled At
                   </span>
                   <span className="font-medium text-rose-700">{formatDate(notification.cancelledAt)}</span>
                 </div>

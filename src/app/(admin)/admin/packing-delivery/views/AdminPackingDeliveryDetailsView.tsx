@@ -1,16 +1,40 @@
 "use client";
 
-import { useState, startTransition } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useRealtimeSubscription } from "@/lib/supabase/useRealtime";
+import Link from "next/link";
+import { toast } from "sonner";
+import {
+  ArrowLeft,
+  Truck,
+  CheckCircle2,
+  AlertCircle,
+  Play,
+  Save,
+  Send,
+  Package,
+  Building2,
+  Printer,
+  Download,
+  Loader2,
+  History,
+  ChevronDown,
+  ChevronUp,
+  Camera,
+  UploadCloud,
+  Trash2,
+  Plus,
+  Eye,
+  X,
+} from "lucide-react";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -19,42 +43,27 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import AdminOrderQuantityBreakdown from "../../orders/views/AdminOrderQuantityBreakdown";
+import { useRealtimeRefresh } from "@/lib/supabase/useRealtime";
+import { DeliveryProofImage } from "@/types/database";
+import { DeliveryProofLightbox } from "@/components/delivery/DeliveryProofLightbox";
+import { getTodayDateIST } from "@/lib/utils";
 import {
-  startPacking,
-  updatePackingProgress,
-  updatePackingChecklistItem,
-  updatePackingRemarks,
-  completePacking,
+  startDelivery,
+  saveDeliveryDetails,
   dispatchOrder,
-  markOrderInTransit,
   markOrderDelivered,
+  uploadDeliveryProofImages,
+  deleteDeliveryProofImage,
 } from "../actions";
-import { toast } from "sonner";
-import {
-  ArrowLeft,
-  Truck,
-  CheckCircle2,
-  AlertCircle,
-  Play,
-  Edit3,
-  History,
-  Layers,
-  Building2,
-  Calendar,
-  Sparkles,
-  Package,
-  Send,
-  Navigation,
-  CheckCircle,
-} from "lucide-react";
-import Link from "next/link";
-import { DELIVERY_CATEGORY_LABELS, getDeliveryBadgeColor } from "./AdminPackingDeliveryListView";
 
-export interface DynamicItemSummary {
+export interface DeliveryItemRow {
+  id: string;
+  styleName: string;
   itemName: string;
-  totalQuantity: number;
-  studentCount: number | null;
+  color: string;
+  size: string;
+  quantity: number;
+  status: "ready" | "in_progress" | "dispatched" | "delivered";
 }
 
 interface OrderInfo {
@@ -66,1249 +75,1525 @@ interface OrderInfo {
   estimated_delivery: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
+  delivery_remarks?: string | null;
   created_at: string;
   updated_at: string;
   schools?: { id: string; name: string } | null;
-  requirements?: {
-    id: string;
-    requirement_number: string;
-    total_students: number | null;
-  } | null;
 }
 
-interface ReqItem {
+interface QCRecord {
   id: string;
-  requirement_id: string;
-  class_name: string | null;
-  section_name: string | null;
-  gender: string | null;
-  item_name: string;
-  size: string;
-  quantity: number;
+  status: string;
+  total_quantity: number;
+  checked_quantity: number;
+  passed_quantity: number;
+  defective_quantity: number;
+  completed_at: string | null;
+  remarks: string | null;
 }
 
 interface PackingRecord {
   id: string;
-  order_id: string;
   status: string;
   total_quantity: number;
   packed_quantity: number;
   remarks: string | null;
   started_at: string | null;
   completed_at: string | null;
-  packed_by: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
-interface ChecklistItem {
-  id: string;
-  packing_record_id: string;
-  item_key: string;
-  label: string;
-  is_completed: boolean;
-  completed_by: string | null;
-  completed_at: string | null;
-}
-
-interface PackingHistoryItem {
+interface HistoryItem {
   id: string;
   from_status: string | null;
   to_status: string;
   note: string | null;
   created_at: string;
-  changed_by: string;
-  profiles?: {
-    id: string;
-    full_name: string | null;
-    role: string;
-  } | null;
+  profiles?: { full_name: string | null; role: string | null } | null;
 }
 
 interface OrderStatusHistoryItem {
   id: string;
-  order_id: string;
   status: string;
   note: string | null;
   created_at: string;
 }
 
-const formatDate = (dateString: string | null, includeTime = false) => {
-  if (!dateString) return "—";
-  const d = new Date(dateString);
-  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-  if (includeTime) {
-    options.hour = "2-digit";
-    options.minute = "2-digit";
-  }
-  return d.toLocaleDateString("en-US", options);
-};
-
-const formatItemName = (name: string) => {
-  if (!name) return "";
-  return name.replace(/\b\w/g, (c) => c.toUpperCase());
-};
+interface AdminPackingDeliveryDetailsViewProps {
+  order: OrderInfo;
+  qcRecord: QCRecord | null;
+  deliveryItems: DeliveryItemRow[];
+  packingRecord: PackingRecord | null;
+  packingHistory: HistoryItem[];
+  orderStatusHistory: OrderStatusHistoryItem[];
+  proofImages?: DeliveryProofImage[];
+}
 
 export default function AdminPackingDeliveryDetailsView({
-  order: initialOrder,
-  requirementItems,
+  order,
   qcRecord,
-  packingRecord: initialPackingRecord,
-  checklistItems,
+  deliveryItems,
+  packingRecord,
   packingHistory,
   orderStatusHistory,
-  totalStudents,
-  dynamicItems,
-}: {
-  order: OrderInfo;
-  requirementItems: ReqItem[];
-  qcRecord: { id: string; status: string; completed_at: string | null } | null;
-  packingRecord: PackingRecord | null;
-  checklistItems: ChecklistItem[];
-  packingHistory: PackingHistoryItem[];
-  orderStatusHistory: OrderStatusHistoryItem[];
-  totalStudents: number;
-  dynamicItems: DynamicItemSummary[];
-}) {
+  proofImages = [],
+}: AdminPackingDeliveryDetailsViewProps) {
   const router = useRouter();
 
-  const [order, setOrder] = useState<OrderInfo>(initialOrder);
-  const [packingRecord, setPackingRecord] = useState<PackingRecord | null>(initialPackingRecord);
-
-  // Realtime subscription for orders table
-  useRealtimeSubscription({
-    table: "orders",
-    filter: `id=eq.${order.id}`,
-    onEvent: (payload) => {
-      if (payload.eventType === "UPDATE" && payload.new) {
-        const updated = payload.new as Record<string, unknown>;
-        setOrder((prev) => ({
-          ...prev,
-          status: (updated.status as string) || prev.status,
-          courier_name: (updated.courier_name as string) ?? prev.courier_name,
-          tracking_number: (updated.tracking_number as string) ?? prev.tracking_number,
-          estimated_delivery: (updated.estimated_delivery as string) ?? prev.estimated_delivery,
-          shipped_at: (updated.shipped_at as string) ?? prev.shipped_at,
-          delivered_at: (updated.delivered_at as string) ?? prev.delivered_at,
-          updated_at: (updated.updated_at as string) || prev.updated_at,
-        }));
-        if (updated.courier_name) setCourierName(updated.courier_name as string);
-        if (updated.tracking_number) setTrackingNumber(updated.tracking_number as string);
-        if (updated.estimated_delivery) setEstimatedDelivery(updated.estimated_delivery as string);
-        startTransition(() => {
-          router.refresh();
-        });
-      }
-    },
+  // Realtime updates on orders, packing records, and delivery proof images
+  useRealtimeRefresh({
+    tables: [
+      { table: "orders" },
+      { table: "packing_records" },
+      { table: "delivery_proof_images" },
+    ],
   });
 
-  // Realtime subscription for packing_records table
-  useRealtimeSubscription({
-    table: "packing_records",
-    filter: `order_id=eq.${order.id}`,
-    onEvent: (payload) => {
-      if (payload.new) {
-        const updated = payload.new as unknown as PackingRecord;
-        setPackingRecord(updated);
-        setPackedQtyInput(updated.packed_quantity || 0);
-        setRemarksInput(updated.remarks || "");
-        toast.info("Packing & delivery details updated in real time");
-        startTransition(() => {
-          router.refresh();
-        });
-      }
-    },
-  });
+  // Section 3: Authoritative QC Completion Rule
+  const isQcCompleted = qcRecord?.status === "completed" || qcRecord?.status === "passed";
 
-  // Realtime subscription for packing history
-  useRealtimeSubscription({
-    table: "packing_history",
-    onEvent: (payload) => {
-      if (payload.eventType === "INSERT") {
-        startTransition(() => {
-          router.refresh();
-        });
-      }
-    },
-  });
+  // Section 11: Delivery Statuses
+  const isDelivered = order.status === "delivered";
+  const isDispatched = order.status === "dispatched" || order.status === "in_transit";
+  const hasStartedDelivery = Boolean(packingRecord) || isDispatched || isDelivered;
 
-  // Dialog States
-  const [isStartDialogOpen, setIsStartDialogOpen] = useState(false);
+  // Quantity calculations strictly from approved QC Passed quantity
+  const totalApprovedQuantity = useMemo(() => {
+    if (deliveryItems.length > 0) {
+      return deliveryItems.reduce((acc, item) => acc + item.quantity, 0);
+    }
+    return qcRecord?.passed_quantity || 0;
+  }, [deliveryItems, qcRecord?.passed_quantity]);
+
+  const deliveredQuantity = isDelivered ? totalApprovedQuantity : 0;
+  const pendingQuantity = Math.max(0, totalApprovedQuantity - deliveredQuantity);
+  const deliveryProgressPercent =
+    totalApprovedQuantity > 0 ? Math.round((deliveredQuantity / totalApprovedQuantity) * 100) : 0;
+
+  // Active state representation
+  const deliveryStatus: "pending_qc" | "ready" | "in_progress" | "dispatched" | "delivered" =
+    useMemo(() => {
+      if (!isQcCompleted) return "pending_qc";
+      if (isDelivered) return "delivered";
+      if (isDispatched) return "dispatched";
+      if (hasStartedDelivery) return "in_progress";
+      return "ready";
+    }, [isQcCompleted, isDelivered, isDispatched, hasStartedDelivery]);
+
+  // Section 13 & 20: Delivery Details Form State
+  const [courierName, setCourierName] = useState(order.courier_name || "");
+  const [trackingNumber, setTrackingNumber] = useState(order.tracking_number || "");
+  const [estimatedDelivery, setEstimatedDelivery] = useState(
+    order.estimated_delivery ? order.estimated_delivery.split("T")[0] : ""
+  );
+  const [deliveryRemarks, setDeliveryRemarks] = useState(
+    order.delivery_remarks || packingRecord?.remarks || ""
+  );
+
+  // Estimated delivery date validation state
+  const todayDateStr = useMemo(() => getTodayDateIST(), []);
+  const initialSavedDate = useMemo(
+    () => (order.estimated_delivery ? order.estimated_delivery.split("T")[0] : ""),
+    [order.estimated_delivery]
+  );
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  const handleDateChange = (val: string) => {
+    setEstimatedDelivery(val);
+    if (val && val < todayDateStr && val !== initialSavedDate) {
+      setDateError("Estimated delivery date cannot be earlier than today.");
+    } else {
+      setDateError(null);
+    }
+  };
+
+  // Modal states
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [showDeliveredModal, setShowDeliveredModal] = useState(false);
   const [startRemarks, setStartRemarks] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Loading states
   const [isStarting, setIsStarting] = useState(false);
-
-  const [isProgressDialogOpen, setIsProgressDialogOpen] = useState(false);
-  const [packedQtyInput, setPackedQtyInput] = useState(initialPackingRecord?.packed_quantity || 0);
-  const [progressNote, setProgressNote] = useState("");
-  const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
-
-  const [isRemarksDialogOpen, setIsRemarksDialogOpen] = useState(false);
-  const [remarksInput, setRemarksInput] = useState(initialPackingRecord?.remarks || "");
-  const [isUpdatingRemarks, setIsUpdatingRemarks] = useState(false);
-
-  const [isCompleteDialogOpen, setIsCompleteDialogOpen] = useState(false);
-  const [completeRemarks, setCompleteRemarks] = useState("");
-  const [isCompleting, setIsCompleting] = useState(false);
-
-  const [isDispatchDialogOpen, setIsDispatchDialogOpen] = useState(false);
-  const [courierName, setCourierName] = useState(initialOrder.courier_name || "");
-  const [trackingNumber, setTrackingNumber] = useState(initialOrder.tracking_number || "");
-  const [estimatedDelivery, setEstimatedDelivery] = useState(initialOrder.estimated_delivery || "");
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
-
-  const [isTransitDialogOpen, setIsTransitDialogOpen] = useState(false);
-  const [transitNote, setTransitNote] = useState("");
-  const [isMarkingTransit, setIsMarkingTransit] = useState(false);
-
-  const [isDeliveredDialogOpen, setIsDeliveredDialogOpen] = useState(false);
-  const [deliveredNote, setDeliveredNote] = useState("");
   const [isMarkingDelivered, setIsMarkingDelivered] = useState(false);
 
-  const [updatingChecklistKey, setUpdatingChecklistKey] = useState<string | null>(null);
+  // Delivery Proof state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedProofFiles, setSelectedProofFiles] = useState<File[]>([]);
+  const [proofPreviews, setProofPreviews] = useState<{ file: File; url: string }[]>([]);
+  const [proofCaption, setProofCaption] = useState("");
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [imageToDelete, setImageToDelete] = useState<DeliveryProofImage | null>(null);
+  const [isDeletingImage, setIsDeletingImage] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  // Computations
-  const totalItemsCount = requirementItems.reduce((acc, it) => acc + (it.quantity || 0), 0);
-  const totalQuantity = packingRecord?.total_quantity ?? totalItemsCount;
-  const packedQuantity = packingRecord?.packed_quantity ?? 0;
-  const pendingQuantity = Math.max(0, totalQuantity - packedQuantity);
-  const progressPercent = totalQuantity > 0 ? Math.min(100, Math.round((packedQuantity / totalQuantity) * 100)) : 0;
+  const handleProofFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const filesArray = Array.from(e.target.files);
+    const MAX_SIZE = 10 * 1024 * 1024;
+    const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
 
-  const allChecklistCompleted =
-    checklistItems.length === 5 && checklistItems.every((item) => item.is_completed);
-
-  // Category computation
-  let deliveryCategory:
-    | "ready_for_packing"
-    | "packing_in_progress"
-    | "packed"
-    | "dispatched"
-    | "in_transit"
-    | "delivered" = "ready_for_packing";
-
-  if (order.status === "dispatched") {
-    deliveryCategory = "dispatched";
-  } else if (order.status === "in_transit") {
-    deliveryCategory = "in_transit";
-  } else if (order.status === "delivered") {
-    deliveryCategory = "delivered";
-  } else if (order.status === "packed") {
-    if (!packingRecord || packingRecord.status === "pending") {
-      deliveryCategory = "ready_for_packing";
-    } else if (packingRecord.status === "in_progress") {
-      deliveryCategory = "packing_in_progress";
-    } else if (packingRecord.status === "completed") {
-      deliveryCategory = "packed";
+    for (const f of filesArray) {
+      if (f.size > MAX_SIZE) {
+        toast.error(`"${f.name}" is too large. Maximum size is 10 MB.`);
+        return;
+      }
+      if (!ALLOWED.includes(f.type)) {
+        toast.error(`"${f.name}" has an unsupported format. Allowed: JPEG, PNG, WebP.`);
+        return;
+      }
     }
-  }
 
-  // Action Handlers
-  const handleStartPacking = async () => {
-    setIsStarting(true);
+    const merged = [...selectedProofFiles, ...filesArray];
+    setSelectedProofFiles(merged);
+    const newPreviews = merged.map((f) => ({ file: f, url: URL.createObjectURL(f) }));
+    setProofPreviews(newPreviews);
+  };
+
+  const handleRemoveProofPreview = (index: number) => {
+    const updated = selectedProofFiles.filter((_, idx) => idx !== index);
+    setSelectedProofFiles(updated);
+    const newPreviews = updated.map((f) => ({ file: f, url: URL.createObjectURL(f) }));
+    setProofPreviews(newPreviews);
+  };
+
+  const handleUploadProof = async () => {
+    if (selectedProofFiles.length === 0) return;
+    setIsUploadingProof(true);
     try {
-      const res = await startPacking(order.id, startRemarks);
+      const formData = new FormData();
+      formData.append("orderId", order.id);
+      if (proofCaption.trim()) {
+        formData.append("caption", proofCaption.trim());
+      }
+      selectedProofFiles.forEach((file) => formData.append("files", file));
+
+      const res = await uploadDeliveryProofImages(formData);
       if (res.error) {
         toast.error(res.error);
       } else {
-        toast.success("Packing started successfully!");
-        setIsStartDialogOpen(false);
+        toast.success(`Successfully uploaded ${res.count} proof ${res.count === 1 ? "photo" : "photos"}`);
+        setSelectedProofFiles([]);
+        setProofPreviews([]);
+        setProofCaption("");
+        if (fileInputRef.current) fileInputRef.current.value = "";
         router.refresh();
       }
     } catch {
-      toast.error("Failed to start packing");
+      toast.error("Failed to upload delivery proof");
+    } finally {
+      setIsUploadingProof(false);
+    }
+  };
+
+  const handleDeleteProof = async () => {
+    if (!imageToDelete) return;
+    setIsDeletingImage(true);
+    try {
+      const res = await deleteDeliveryProofImage(imageToDelete.id, order.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("Delivery proof photo deleted");
+        setImageToDelete(null);
+        router.refresh();
+      }
+    } catch {
+      toast.error("Failed to delete delivery proof");
+    } finally {
+      setIsDeletingImage(false);
+    }
+  };
+
+  // Date formatting helper
+  const formatDate = (dateString?: string | null, includeTime = false) => {
+    if (!dateString) return "—";
+    const d = new Date(dateString);
+    const options: Intl.DateTimeFormatOptions = {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    };
+    if (includeTime) {
+      options.hour = "2-digit";
+      options.minute = "2-digit";
+    }
+    return d.toLocaleDateString("en-US", options);
+  };
+
+  // Section 12: Start Delivery Handler
+  const handleStartDelivery = async () => {
+    if (!isQcCompleted) {
+      toast.error("Complete Quality Check before starting delivery.");
+      return;
+    }
+    if (totalApprovedQuantity <= 0) {
+      toast.error("No approved pieces are available for delivery.");
+      return;
+    }
+
+    setIsStarting(true);
+    try {
+      const res = await startDelivery(order.id, startRemarks.trim() || undefined);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("Delivery preparation started successfully.");
+        setShowStartModal(false);
+        router.refresh();
+      }
+    } catch (err: unknown) {
+      console.error("Start delivery error:", err);
+      toast.error("Failed to start delivery. Please try again.");
     } finally {
       setIsStarting(false);
     }
   };
 
-  const handleUpdateProgress = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (packedQtyInput < 0 || packedQtyInput > totalQuantity) {
-      toast.error(`Packed quantity must be between 0 and ${totalQuantity}`);
+  // Section 13 & 20: Save Delivery Details Handler
+  const handleSaveDetails = async () => {
+    if (estimatedDelivery && estimatedDelivery < todayDateStr && estimatedDelivery !== initialSavedDate) {
+      setDateError("Estimated delivery date cannot be earlier than today.");
+      toast.error("Estimated delivery date cannot be earlier than today.");
       return;
     }
-
-    setIsUpdatingProgress(true);
+    setDateError(null);
+    setIsSavingDetails(true);
     try {
-      const res = await updatePackingProgress(order.id, Number(packedQtyInput), progressNote);
+      const res = await saveDeliveryDetails(order.id, {
+        courierName: courierName.trim() || null,
+        trackingNumber: trackingNumber.trim() || null,
+        estimatedDelivery: estimatedDelivery || null,
+        remarks: deliveryRemarks.trim() || null,
+      });
+
       if (res.error) {
         toast.error(res.error);
       } else {
-        toast.success("Packing progress updated");
-        setIsProgressDialogOpen(false);
-        setProgressNote("");
+        toast.success("Delivery details saved successfully.");
         router.refresh();
       }
-    } catch {
-      toast.error("Failed to update packing progress");
+    } catch (err: unknown) {
+      console.error("Save details error:", err);
+      toast.error("Failed to save delivery details.");
     } finally {
-      setIsUpdatingProgress(false);
+      setIsSavingDetails(false);
     }
   };
 
-  const handleToggleChecklist = async (item: ChecklistItem) => {
-    if (!packingRecord) return;
-    if (packingRecord.status === "completed") {
-      toast.info("Packing is already completed. Checklist cannot be altered.");
+  // Section 15: Mark as Dispatched Handler
+  const handleDispatchOrder = async () => {
+    if (estimatedDelivery && estimatedDelivery < todayDateStr && estimatedDelivery !== initialSavedDate) {
+      setDateError("Estimated delivery date cannot be earlier than today.");
+      toast.error("Estimated delivery date cannot be earlier than today.");
       return;
     }
-
-    setUpdatingChecklistKey(item.item_key);
-    try {
-      const res = await updatePackingChecklistItem(
-        packingRecord.id,
-        item.item_key,
-        !item.is_completed
-      );
-      if (res.error) {
-        toast.error(res.error);
-      } else {
-        router.refresh();
-      }
-    } catch {
-      toast.error("Failed to update checklist item");
-    } finally {
-      setUpdatingChecklistKey(null);
-    }
-  };
-
-  const handleUpdateRemarks = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsUpdatingRemarks(true);
-    try {
-      const res = await updatePackingRemarks(order.id, remarksInput);
-      if (res.error) {
-        toast.error(res.error);
-      } else {
-        toast.success("Remarks updated");
-        setIsRemarksDialogOpen(false);
-        router.refresh();
-      }
-    } catch {
-      toast.error("Failed to update remarks");
-    } finally {
-      setIsUpdatingRemarks(false);
-    }
-  };
-
-  const handleCompletePacking = async () => {
-    if (packedQuantity !== totalQuantity) {
-      toast.error(`All ${totalQuantity} items must be packed before completing packing.`);
-      return;
-    }
-
-    if (!allChecklistCompleted) {
-      toast.error("Complete all packing checklist items before completing packing.");
-      return;
-    }
-
-    setIsCompleting(true);
-    try {
-      const res = await completePacking(order.id, completeRemarks);
-      if (res.error) {
-        toast.error(res.error);
-      } else {
-        toast.success("Packing completed successfully! Order is ready for dispatch.");
-        setIsCompleteDialogOpen(false);
-        router.refresh();
-      }
-    } catch {
-      toast.error("Failed to complete packing");
-    } finally {
-      setIsCompleting(false);
-    }
-  };
-
-  const handleDispatchOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!courierName.trim()) {
-      toast.error("Courier name is required");
-      return;
-    }
-    if (!trackingNumber.trim()) {
-      toast.error("Tracking number is required");
-      return;
-    }
-    if (!estimatedDelivery.trim()) {
-      toast.error("Estimated delivery date is required");
-      return;
-    }
-
+    setDateError(null);
     setIsDispatching(true);
     try {
       const res = await dispatchOrder(
         order.id,
-        courierName.trim(),
-        trackingNumber.trim(),
-        estimatedDelivery.trim()
+        courierName.trim() || null,
+        trackingNumber.trim() || null,
+        estimatedDelivery || null,
+        deliveryRemarks.trim() || null
       );
+
       if (res.error) {
         toast.error(res.error);
       } else {
-        toast.success("Order dispatched successfully!");
-        setIsDispatchDialogOpen(false);
+        toast.success("Order marked as Dispatched successfully.");
+        setShowDispatchModal(false);
         router.refresh();
       }
-    } catch {
-      toast.error("Failed to dispatch order");
+    } catch (err: unknown) {
+      console.error("Dispatch order error:", err);
+      toast.error("Failed to dispatch order.");
     } finally {
       setIsDispatching(false);
     }
   };
 
-  const handleMarkInTransit = async () => {
-    setIsMarkingTransit(true);
-    try {
-      const res = await markOrderInTransit(order.id, transitNote);
-      if (res.error) {
-        toast.error(res.error);
-      } else {
-        toast.success("Order marked as In Transit");
-        setIsTransitDialogOpen(false);
-        setTransitNote("");
-        router.refresh();
-      }
-    } catch {
-      toast.error("Failed to mark in transit");
-    } finally {
-      setIsMarkingTransit(false);
-    }
-  };
-
+  // Section 16: Mark as Delivered Handler
   const handleMarkDelivered = async () => {
     setIsMarkingDelivered(true);
     try {
-      const res = await markOrderDelivered(order.id, deliveredNote);
+      const res = await markOrderDelivered(
+        order.id,
+        "Consignment delivered to school premises by Admin",
+        deliveryRemarks.trim() || undefined
+      );
+
       if (res.error) {
         toast.error(res.error);
       } else {
-        toast.success("Order marked as Delivered!");
-        setIsDeliveredDialogOpen(false);
-        setDeliveredNote("");
+        toast.success("Order marked as Delivered successfully.");
+        setShowDeliveredModal(false);
         router.refresh();
       }
-    } catch {
-      toast.error("Failed to mark delivered");
+    } catch (err: unknown) {
+      console.error("Mark delivered error:", err);
+      toast.error("Failed to mark order as delivered.");
     } finally {
       setIsMarkingDelivered(false);
     }
   };
 
+  // Section 29: Excel Export
+  const handleExportExcel = async () => {
+    if (deliveryItems.length === 0) {
+      toast.error("No delivery items available to export.");
+      return;
+    }
+
+    const exportRows = deliveryItems.map((item) => ({
+      "Order Number": order.order_number,
+      School: order.schools?.name || "Unknown School",
+      Style: item.styleName,
+      Item: item.itemName,
+      Color: item.color,
+      Size: item.size,
+      "Approved Quantity": item.quantity,
+      "Delivered Quantity": isDelivered ? item.quantity : 0,
+      "Pending Quantity": isDelivered ? 0 : item.quantity,
+      Status:
+        deliveryStatus === "delivered"
+          ? "Delivered"
+          : deliveryStatus === "dispatched"
+          ? "Dispatched"
+          : deliveryStatus === "in_progress"
+          ? "In Progress"
+          : "Ready",
+    }));
+
+    const XLSX = await import("xlsx");
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Delivery Items");
+    XLSX.writeFile(wb, `EVENVIBE-Delivery-${order.order_number}.xlsx`);
+    toast.success("Delivery Excel report downloaded.");
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Back Link & Header */}
-      <div>
+    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* Top Navigation & Breadcrumbs */}
+      <div className="flex items-center justify-between gap-4">
         <Link
           href="/admin/packing-delivery"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-slate-900 transition-colors mb-3"
+          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Packing & Delivery Queue
+          <ArrowLeft className="w-4 h-4" />
+          Back to Delivery List
         </Link>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-                <Truck className="h-6 w-6 text-emerald-600" />
-                Order {order.order_number}
-              </h1>
-              <Badge
-                variant="outline"
-                className={`text-xs px-2.5 py-1 font-semibold ${getDeliveryBadgeColor(deliveryCategory)}`}
-              >
-                {DELIVERY_CATEGORY_LABELS[deliveryCategory] || deliveryCategory}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-slate-400" />
-              <span>{order.schools?.name || "School"}</span>
-              <span className="text-slate-300">•</span>
-              <Calendar className="h-4 w-4 text-slate-400" />
-              <span>Ordered {formatDate(order.created_at)}</span>
-            </p>
-          </div>
 
-          {/* Contextual Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* 1. Ready for Packing */}
-            {deliveryCategory === "ready_for_packing" && (
-              <Button
-                onClick={() => {
-                  setStartRemarks("");
-                  setIsStartDialogOpen(true);
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm"
-              >
-                <Play className="h-4 w-4" />
-                Start Packing
-              </Button>
-            )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+            className="hidden sm:inline-flex items-center gap-1.5"
+          >
+            <Printer className="w-4 h-4 text-slate-500" />
+            Print Note
+          </Button>
 
-            {/* 2. Packing In Progress */}
-            {deliveryCategory === "packing_in_progress" && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setPackedQtyInput(packedQuantity);
-                    setProgressNote("");
-                    setIsProgressDialogOpen(true);
-                  }}
-                  className="gap-1.5 border-slate-300"
-                >
-                  <Edit3 className="h-4 w-4 text-slate-600" />
-                  Update Progress
-                </Button>
-                <Button
-                  onClick={() => {
-                    setCompleteRemarks(packingRecord?.remarks || "");
-                    setIsCompleteDialogOpen(true);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm"
-                  disabled={packedQuantity !== totalQuantity || !allChecklistCompleted}
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Complete Packing
-                </Button>
-              </>
-            )}
-
-            {/* 3. Packed -> Ready for Dispatch */}
-            {deliveryCategory === "packed" && (
-              <Button
-                onClick={() => {
-                  setCourierName(order.courier_name || "");
-                  setTrackingNumber(order.tracking_number || "");
-                  setEstimatedDelivery(order.estimated_delivery || "");
-                  setIsDispatchDialogOpen(true);
-                }}
-                className="bg-purple-600 hover:bg-purple-700 text-white gap-1.5 shadow-sm"
-              >
-                <Send className="h-4 w-4" />
-                Dispatch Order
-              </Button>
-            )}
-
-            {/* 4. Dispatched -> Mark In Transit */}
-            {deliveryCategory === "dispatched" && (
-              <Button
-                onClick={() => {
-                  setTransitNote("");
-                  setIsTransitDialogOpen(true);
-                }}
-                className="bg-sky-600 hover:bg-sky-700 text-white gap-1.5 shadow-sm"
-              >
-                <Navigation className="h-4 w-4" />
-                Mark In Transit
-              </Button>
-            )}
-
-            {/* 5. In Transit -> Mark Delivered */}
-            {deliveryCategory === "in_transit" && (
-              <Button
-                onClick={() => {
-                  setDeliveredNote("");
-                  setIsDeliveredDialogOpen(true);
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm"
-              >
-                <CheckCircle className="h-4 w-4" />
-                Mark Delivered
-              </Button>
-            )}
-
-            {/* 6. Delivered */}
-            {deliveryCategory === "delivered" && (
-              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 px-3 py-1 text-sm font-medium gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                Delivery Complete
-              </Badge>
-            )}
-          </div>
+          {deliveryItems.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              className="inline-flex items-center gap-1.5"
+            >
+              <Download className="w-4 h-4 text-slate-500" />
+              Export Excel
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="border-slate-200">
-          <CardContent className="p-4">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Order Quantity</p>
-            <p className="text-2xl font-bold text-slate-900 mt-1">{totalQuantity}</p>
-            <p className="text-xs text-slate-400 mt-0.5">Historical Snapshot</p>
-          </CardContent>
-        </Card>
+      {/* Section 4: Page Header */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-xs uppercase font-bold tracking-wider text-evenvibe-deep dark:text-emerald-400 bg-evenvibe-light dark:bg-emerald-950/60 px-2.5 py-1 rounded-md">
+              Delivery
+            </span>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              Order #{order.order_number}
+            </h1>
 
-        <Card className="border-slate-200">
-          <CardContent className="p-4">
-            <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">Packed Quantity</p>
-            <p className="text-2xl font-bold text-blue-700 mt-1">{packedQuantity}</p>
-            <p className="text-xs text-slate-400 mt-0.5">Verified & Boxed</p>
-          </CardContent>
-        </Card>
+            {/* Status Badge */}
+            {deliveryStatus === "delivered" ? (
+              <Badge className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium border-0 px-3 py-1 text-xs">
+                Delivered
+              </Badge>
+            ) : deliveryStatus === "dispatched" ? (
+              <Badge className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium border-0 px-3 py-1 text-xs">
+                Dispatched
+              </Badge>
+            ) : deliveryStatus === "in_progress" ? (
+              <Badge className="bg-evenvibe-primary hover:bg-blue-700 text-white font-medium border-0 px-3 py-1 text-xs">
+                Delivery In Progress
+              </Badge>
+            ) : deliveryStatus === "ready" ? (
+              <Badge className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium border-0 px-3 py-1 text-xs">
+                Ready for Delivery
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="bg-slate-200 text-slate-700 font-medium px-3 py-1 text-xs">
+                Pending QC
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            School:{" "}
+            <span className="font-semibold text-slate-800 dark:text-slate-200">
+              {order.schools?.name || "Unknown School"}
+            </span>
+          </p>
+        </div>
 
-        <Card className="border-slate-200">
-          <CardContent className="p-4">
-            <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Pending Quantity</p>
-            <p className="text-2xl font-bold text-amber-700 mt-1">{pendingQuantity}</p>
-            <p className="text-xs text-slate-400 mt-0.5">Remaining to Pack</p>
-          </CardContent>
-        </Card>
+        {/* Section 21: Delivery Primary Actions */}
+        <div className="flex items-center gap-3">
+          {deliveryStatus === "ready" && (
+            <Button
+              onClick={() => setShowStartModal(true)}
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm"
+            >
+              <Play className="w-4 h-4 fill-white" />
+              Start Delivery
+            </Button>
+          )}
 
-        <Card className="border-slate-200">
-          <CardContent className="p-4">
-            <p className="text-xs font-medium text-emerald-600 uppercase tracking-wider">Packing Progress</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold text-emerald-700">{progressPercent}%</span>
-              <span className="text-xs text-slate-400">({packedQuantity}/{totalQuantity})</span>
+          {deliveryStatus === "in_progress" && (
+            <Button
+              onClick={() => setShowDispatchModal(true)}
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm"
+            >
+              <Send className="w-4 h-4" />
+              Mark as Dispatched
+            </Button>
+          )}
+
+          {deliveryStatus === "dispatched" && (
+            <Button
+              onClick={() => setShowDeliveredModal(true)}
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Mark as Delivered
+            </Button>
+          )}
+
+          {deliveryStatus === "delivered" && (
+            <div className="flex items-center gap-2 text-evenvibe-primary dark:text-emerald-400 bg-evenvibe-light dark:bg-emerald-950/40 px-3.5 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm font-semibold">
+              <CheckCircle2 className="w-4 h-4" />
+              Delivery Completed
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
+          )}
+        </div>
+      </div>
+
+      {/* Section 3: QC Incomplete Warning */}
+      {!isQcCompleted && (
+        <Card className="border-amber-300 bg-amber-50/70 dark:bg-amber-950/30 shadow-sm">
+          <CardContent className="p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/50 rounded-lg text-amber-700 dark:text-amber-300">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                  Quality Check Incomplete
+                </h4>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  Complete Quality Check before starting delivery.
+                </p>
+              </div>
+            </div>
+
+            <Link href={`/admin/quality-check/${order.id}`}>
+              <Button size="sm" variant="outline" className="border-amber-400 text-amber-800 hover:bg-amber-100 bg-white dark:bg-slate-900">
+                Go to Quality Check
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Section 10: Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+        {/* Card 1: Approved Quantity */}
+        <Card className="border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-emerald-200">
+          <CardHeader className="p-5 pb-3">
+            <div className="flex items-center justify-between">
+              <CardDescription className="text-xs uppercase font-bold text-slate-500 tracking-wider">
+                Approved Quantity
+              </CardDescription>
+              <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
+                <CheckCircle2 className="w-4 h-4 text-evenvibe-primary dark:text-emerald-400" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-2">
+              {totalApprovedQuantity}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-800/50 pt-3 mt-1">
+              QC Passed physical units
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: Items */}
+        <Card className="border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-slate-300">
+          <CardHeader className="p-5 pb-3">
+            <div className="flex items-center justify-between">
+              <CardDescription className="text-xs uppercase font-bold text-slate-500 tracking-wider">
+                Items
+              </CardDescription>
+              <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <Package className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-2">
+              {deliveryItems.length}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-800/50 pt-3 mt-1">
+              Approved style/size rows
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 3: Delivered */}
+        <Card className="border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-emerald-200">
+          <CardHeader className="p-5 pb-3">
+            <div className="flex items-center justify-between">
+              <CardDescription className="text-xs uppercase font-bold text-slate-500 tracking-wider">
+                Delivered
+              </CardDescription>
+              <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
+                <Truck className="w-4 h-4 text-evenvibe-primary dark:text-emerald-400" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl font-black text-evenvibe-primary dark:text-emerald-400 mt-2">
+              {deliveredQuantity}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-800/50 pt-3 mt-1">
+              {isDelivered ? "100% completed" : "Pending arrival"}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 4: Pending Delivery */}
+        <Card className="border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-amber-200">
+          <CardHeader className="p-5 pb-3">
+            <div className="flex items-center justify-between">
+              <CardDescription className="text-xs uppercase font-bold text-slate-500 tracking-wider">
+                Pending Delivery
+              </CardDescription>
+              <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-status-warning dark:text-amber-400" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl font-black text-status-warning dark:text-amber-400 mt-2">
+              {pendingQuantity}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-800/50 pt-3 mt-1">
+              Units in delivery pipeline
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Delivery Progress Bar */}
+      {totalApprovedQuantity > 0 && (
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 p-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs font-medium">
+              <span className="text-slate-600 dark:text-slate-300">
+                Delivery Progress: <strong>{deliveredQuantity}</strong> / {totalApprovedQuantity} units
+              </span>
+              <span className="text-evenvibe-primary font-bold">{deliveryProgressPercent}%</span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
-                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
+                className="h-full bg-evenvibe-primary transition-all duration-300"
+                style={{ width: `${deliveryProgressPercent}%` }}
               />
             </div>
-          </CardContent>
+          </div>
         </Card>
-      </div>
+      )}
 
-      {/* Two Column Grid: Order & Delivery Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Order Information */}
-        <Card className="border-slate-200">
-          <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
-            <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-emerald-600" />
-              Order Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 space-y-2.5 text-xs">
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Order Number</span>
-              <span className="font-semibold text-slate-900">{order.order_number}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">School</span>
-              <span className="font-medium text-slate-800">{order.schools?.name || "—"}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Order Date</span>
-              <span className="font-medium text-slate-800">{formatDate(order.created_at)}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">QC Passed Date</span>
-              <span className="font-medium text-slate-800">
-                {formatDate(qcRecord?.completed_at || null, true)}
-              </span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Shipped Date</span>
-              <span className="font-medium text-slate-800">{formatDate(order.shipped_at, true)}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Delivered Date</span>
-              <span className="font-medium text-slate-800">{formatDate(order.delivered_at, true)}</span>
-            </div>
-            <div className="flex justify-between py-1">
-              <span className="text-slate-500">Last Updated</span>
-              <span className="font-medium text-slate-800">{formatDate(order.updated_at, true)}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Delivery Details */}
-        <Card className="border-slate-200">
-          <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
-            <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <Truck className="h-4 w-4 text-purple-600" />
-              Delivery Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 space-y-2.5 text-xs">
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Courier Partner</span>
-              <span className="font-semibold text-slate-900">{order.courier_name || "—"}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Tracking Number</span>
-              <span className="font-mono font-medium text-slate-900">{order.tracking_number || "—"}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Estimated Delivery</span>
-              <span className="font-medium text-slate-800">{formatDate(order.estimated_delivery)}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Shipped Timestamp</span>
-              <span className="font-medium text-slate-800">{formatDate(order.shipped_at, true)}</span>
-            </div>
-            <div className="flex justify-between py-1">
-              <span className="text-slate-500">Delivered Timestamp</span>
-              <span className="font-medium text-slate-800">{formatDate(order.delivered_at, true)}</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Packing Checklist & Remarks Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Checklist (2 cols) */}
-        <Card className="border-slate-200 md:col-span-2">
-          <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                  <Package className="h-4 w-4 text-emerald-600" />
-                  Standard Packing Checklist (5 Items)
-                </CardTitle>
-                <CardDescription className="text-xs mt-0.5">
-                  All 5 checklist items must be completed before final packing completion can occur.
-                </CardDescription>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column: Delivery Items Table */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+            <CardHeader className="p-5 md:p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Package className="w-5 h-5 text-evenvibe-primary" />
+                    Delivery Items
+                  </CardTitle>
+                  <CardDescription className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    Approved quantities ready for delivery.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="border-slate-200 text-slate-600 text-xs py-1">
+                  {deliveryItems.length} {deliveryItems.length === 1 ? "Row" : "Rows"}
+                </Badge>
               </div>
-              <Badge
-                variant="outline"
-                className={`text-xs ${
-                  allChecklistCompleted
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-amber-50 text-amber-700 border-amber-200"
-                }`}
-              >
-                {checklistItems.filter((it) => it.is_completed).length} / 5 Done
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4">
-            {checklistItems.length === 0 ? (
-              <p className="text-xs text-slate-500 py-4 text-center">
-                Checklist items will be automatically initialized once packing is started.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {checklistItems.map((item) => (
+            </CardHeader>
+
+            <CardContent className="p-0">
+              {deliveryItems.length === 0 ? (
+                <div className="p-12 text-center space-y-3">
+                  <Package className="w-12 h-12 text-slate-400 mx-auto" />
+                  <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                    No approved pieces are available for delivery.
+                  </h3>
+                  <p className="text-sm text-slate-500 max-w-md mx-auto">
+                    Approved delivery items come strictly from QC Passed physical quantities.
+                    Please ensure Quality Check has been completed with passed items.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50/60 dark:bg-slate-900/60">
+                          <th className="py-3 px-4">Style</th>
+                          <th className="py-3 px-4">Item</th>
+                          <th className="py-3 px-4">Color</th>
+                          <th className="py-3 px-4 text-center">Size</th>
+                          <th className="py-3 px-4 text-center">Quantity</th>
+                          <th className="py-3 px-4 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {deliveryItems.map((item) => (
+                          <tr
+                            key={item.id}
+                            className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                          >
+                            <td className="py-3.5 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                              {item.styleName}
+                            </td>
+                            <td className="py-3.5 px-4 font-medium text-slate-700 dark:text-slate-300">
+                              {item.itemName}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
+                              {item.color}
+                            </td>
+                            <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
+                              Size {item.size}
+                            </td>
+                            <td className="py-3.5 px-4 text-center font-bold text-evenvibe-deep dark:text-emerald-400">
+                              <span className="bg-evenvibe-light dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800 px-3 py-1 rounded-md">
+                                {item.quantity}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              {item.status === "delivered" ? (
+                                <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
+                                  Delivered
+                                </Badge>
+                              ) : item.status === "dispatched" ? (
+                                <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
+                                  Dispatched
+                                </Badge>
+                              ) : item.status === "in_progress" ? (
+                                <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
+                                  In Progress
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-slate-100 text-slate-700 font-medium px-2.5 py-0.5 text-xs">
+                                  Ready
+                                </Badge>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="md:hidden space-y-3">
+                    {deliveryItems.map((item) => (
+                      <MobileCard key={item.id}>
+                        <MobileCardField label="Style">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{item.styleName}</span>
+                        </MobileCardField>
+                        <MobileCardField label="Item">
+                          <span className="font-medium text-slate-700 dark:text-slate-300">{item.itemName}</span>
+                        </MobileCardField>
+                        <MobileCardField label="Color">
+                          <span className="text-slate-600 dark:text-slate-400">{item.color}</span>
+                        </MobileCardField>
+                        <MobileCardField label="Size">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">Size {item.size}</span>
+                        </MobileCardField>
+                        <MobileCardField label="Quantity">
+                          <span className="inline-block bg-evenvibe-light dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800 px-2.5 py-0.5 rounded-md font-bold text-evenvibe-deep dark:text-emerald-400">
+                            {item.quantity}
+                          </span>
+                        </MobileCardField>
+                        <MobileCardField label="Status">
+                          {item.status === "delivered" ? (
+                            <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
+                              Delivered
+                            </Badge>
+                          ) : item.status === "dispatched" ? (
+                            <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
+                              Dispatched
+                            </Badge>
+                          ) : item.status === "in_progress" ? (
+                            <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
+                              In Progress
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-slate-100 text-slate-700 font-medium px-2.5 py-0.5 text-xs">
+                              Ready
+                            </Badge>
+                          )}
+                        </MobileCardField>
+                      </MobileCard>
+                    ))}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column: Order Information & Delivery Details */}
+        <div className="space-y-6">
+          {/* Section 19: Order Information */}
+          <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+            <CardHeader className="p-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-slate-500" />
+                Order Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 space-y-3 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-50 dark:border-slate-800/60">
+                <span className="text-slate-500">Order Number</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {order.order_number}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-50 dark:border-slate-800/60">
+                <span className="text-slate-500">School</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {order.schools?.name || "Unknown School"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-50 dark:border-slate-800/60">
+                <span className="text-slate-500">Order Date</span>
+                <span className="text-slate-700 dark:text-slate-300">
+                  {formatDate(order.created_at)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-50 dark:border-slate-800/60">
+                <span className="text-slate-500">QC Completed Date</span>
+                <span className="text-slate-700 dark:text-slate-300">
+                  {formatDate(qcRecord?.completed_at)}
+                </span>
+              </div>
+              {order.shipped_at && (
+                <div className="flex items-center justify-between pb-2 border-b border-slate-50 dark:border-slate-800/60">
+                  <span className="text-slate-500">Dispatched Date</span>
+                  <span className="text-slate-700 dark:text-slate-300">
+                    {formatDate(order.shipped_at, true)}
+                  </span>
+                </div>
+              )}
+              {order.delivered_at && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Delivered Date</span>
+                  <span className="font-semibold text-evenvibe-primary dark:text-emerald-400">
+                    {formatDate(order.delivered_at, true)}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Section 20: Delivery Details Card */}
+          <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+            <CardHeader className="p-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Truck className="w-4 h-4 text-evenvibe-primary" />
+                Delivery Details
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-500">
+                Courier partner, tracking reference, and schedule.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="courierName" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Delivery Partner
+                </Label>
+                <Input
+                  id="courierName"
+                  placeholder="e.g. Blue Dart, DTDC, Hand Delivery"
+                  value={courierName}
+                  disabled={isDelivered}
+                  onChange={(e) => setCourierName(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="trackingNumber" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Tracking Number
+                </Label>
+                <Input
+                  id="trackingNumber"
+                  placeholder="e.g. TRK123456789"
+                  value={trackingNumber}
+                  disabled={isDelivered}
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  className="h-9 text-xs font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="estimatedDelivery" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Estimated Delivery Date
+                  </Label>
+                  <span className="text-[10px] text-slate-400">Today or future</span>
+                </div>
+                <Input
+                  id="estimatedDelivery"
+                  type="date"
+                  min={todayDateStr}
+                  value={estimatedDelivery}
+                  disabled={isDelivered}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className={`h-9 text-xs ${dateError ? "border-status-error focus-visible:ring-red-400" : ""}`}
+                />
+                {dateError && (
+                  <p className="text-[11px] text-status-error font-medium flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    {dateError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="deliveryRemarks" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Delivery Remarks
+                </Label>
+                <Textarea
+                  id="deliveryRemarks"
+                  placeholder="Optional delivery instructions or notes"
+                  rows={2}
+                  value={deliveryRemarks}
+                  disabled={isDelivered}
+                  onChange={(e) => setDeliveryRemarks(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+
+              {!isDelivered && (
+                <Button
+                  onClick={handleSaveDetails}
+                  disabled={isSavingDetails}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs h-9 font-medium gap-1.5 shadow-sm"
+                >
+                  {isSavingDetails ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  Save Delivery Details
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* SECTION: DELIVERY PROOF (Image Upload & Gallery) */}
+      <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 overflow-hidden">
+        <CardHeader className="p-5 pb-3 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Camera className="w-4 h-4 text-evenvibe-primary" />
+              Delivery Proof
+            </CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              Upload photos as proof of packing, dispatch or delivery.
+            </CardDescription>
+          </div>
+
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp,image/jpg"
+              className="hidden"
+              onChange={handleProofFileSelect}
+              disabled={!isQcCompleted || isUploadingProof}
+            />
+            <Button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!isQcCompleted || isUploadingProof}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs font-medium border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+            >
+              <Plus className="w-3.5 h-3.5 text-evenvibe-primary" />
+              Upload Images
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-5">
+          {/* Pre-upload File Selection Previews */}
+          {proofPreviews.length > 0 && (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Selected Images ({proofPreviews.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProofFiles([]);
+                    setProofPreviews([]);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="text-xs text-slate-500 hover:text-slate-700 underline"
+                >
+                  Clear all
+                </button>
+              </div>
+
+              {/* Thumbnails of selected images */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                {proofPreviews.map((preview, idx) => (
                   <div
-                    key={item.id}
-                    className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
-                      item.is_completed
-                        ? "bg-emerald-50/40 border-emerald-200"
-                        : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
+                    key={`preview-${idx}`}
+                    className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                   >
-                    <Checkbox
-                      id={item.id}
-                      checked={item.is_completed}
-                      disabled={
-                        updatingChecklistKey === item.item_key ||
-                        !packingRecord ||
-                        packingRecord.status === "completed"
-                      }
-                      onCheckedChange={() => handleToggleChecklist(item)}
-                      className="mt-0.5"
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={preview.url}
+                      alt={preview.file.name}
+                      className="w-full h-full object-cover"
                     />
-                    <div className="flex-1 text-xs">
-                      <label
-                        htmlFor={item.id}
-                        className={`font-medium cursor-pointer ${
-                          item.is_completed ? "text-slate-900 line-through text-slate-500" : "text-slate-800"
-                        }`}
-                      >
-                        {item.label}
-                      </label>
-                      {item.is_completed && item.completed_at && (
-                        <p className="text-[11px] text-emerald-600 mt-0.5">
-                          Completed on {formatDate(item.completed_at, true)}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveProofPreview(idx)}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
+                      title="Remove"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                    <div className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-[10px] px-1.5 py-0.5 truncate">
+                      {preview.file.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Optional Caption Field */}
+              <div className="space-y-1.5">
+                <Label htmlFor="proofCaption" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Caption (optional)
+                </Label>
+                <Input
+                  id="proofCaption"
+                  placeholder="e.g. Final packed parcel photo, courier handover, delivery receipt"
+                  value={proofCaption}
+                  onChange={(e) => setProofCaption(e.target.value)}
+                  className="h-8 text-xs bg-white dark:bg-slate-900"
+                />
+              </div>
+
+              {/* Upload Button */}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedProofFiles([]);
+                    setProofPreviews([]);
+                    setProofCaption("");
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  disabled={isUploadingProof}
+                  className="text-xs h-8"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleUploadProof}
+                  disabled={isUploadingProof}
+                  className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white text-xs h-8 gap-1.5"
+                >
+                  {isUploadingProof ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <UploadCloud className="w-3.5 h-3.5" />
+                  )}
+                  {isUploadingProof
+                    ? "Uploading..."
+                    : `Upload ${proofPreviews.length} ${proofPreviews.length === 1 ? "Image" : "Images"}`}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Uploaded Images Gallery */}
+          {proofImages.length === 0 ? (
+            <div className="text-center py-8 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+              <Camera className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-60" />
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                No delivery proof uploaded yet.
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                {isQcCompleted
+                  ? "Upload photos as proof of packing, dispatch handover, or delivery confirmation."
+                  : "Complete Quality Check before starting delivery and uploading proof."}
+              </p>
+              {isQcCompleted && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-3 text-xs h-8 gap-1 text-evenvibe-deep border-emerald-200 hover:bg-emerald-50"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Upload Images
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+              {proofImages.map((img, idx) => (
+                <div
+                  key={img.id}
+                  className="group relative flex flex-col rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 overflow-hidden shadow-xs hover:shadow-sm transition-all"
+                >
+                  {/* Thumbnail */}
+                  <div
+                    onClick={() => setLightboxIndex(idx)}
+                    className="aspect-square w-full bg-slate-100 dark:bg-slate-900 overflow-hidden cursor-pointer relative"
+                  >
+                    {img.signed_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={img.signed_url}
+                        alt={img.caption || img.file_name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
+                        Unavailable
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <Eye className="w-5 h-5 text-white drop-shadow-md" />
+                    </div>
+                  </div>
+
+                  {/* Details & Actions */}
+                  <div className="p-2.5 flex-1 flex flex-col justify-between text-xs space-y-1.5">
+                    <div>
+                      {img.caption ? (
+                        <p
+                          className="font-semibold text-slate-800 dark:text-slate-200 text-xs line-clamp-1"
+                          title={img.caption}
+                        >
+                          {img.caption}
+                        </p>
+                      ) : (
+                        <p
+                          className="font-mono text-[11px] text-slate-500 truncate"
+                          title={img.file_name}
+                        >
+                          {img.file_name}
                         </p>
                       )}
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Uploaded by {img.profiles?.full_name || "Admin"} • {formatDate(img.created_at)}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                      <button
+                        type="button"
+                        onClick={() => setLightboxIndex(idx)}
+                        className="text-[11px] text-evenvibe-primary dark:text-emerald-400 hover:underline font-medium"
+                      >
+                        View
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setImageToDelete(img)}
+                        className="p-1 text-slate-400 hover:text-status-error rounded transition-colors"
+                        title="Delete Image"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Section 15 & 16: Audit Trail History */}
+      <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+        <button
+          type="button"
+          onClick={() => setShowHistory((prev) => !prev)}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-slate-500" />
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Delivery History
+            </span>
+            <span className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+              {packingHistory.length + orderStatusHistory.length}
+            </span>
+          </div>
+
+          <div className="text-slate-400">
+            {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+        </button>
+
+        {showHistory && (
+          <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-50 dark:divide-slate-800/50">
+            {packingHistory.length === 0 && orderStatusHistory.length === 0 ? (
+              <p className="text-xs text-slate-500 py-3">No delivery history recorded yet.</p>
+            ) : (
+              <div className="space-y-3 pt-3">
+                {orderStatusHistory.map((item) => (
+                  <div
+                    key={`osh-${item.id}`}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between text-xs py-1.5 gap-1"
+                  >
+                    <div>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                        Order Status: {item.status}
+                      </span>
+                      {item.note && (
+                        <p className="text-slate-500 dark:text-slate-400 mt-0.5">{item.note}</p>
+                      )}
+                    </div>
+                    <div className="text-slate-400 shrink-0 text-[11px]">
+                      {formatDate(item.created_at, true)}
                     </div>
                   </div>
                 ))}
 
-                {!allChecklistCompleted && packingRecord?.status === "in_progress" && (
-                  <div className="flex items-center gap-2 p-2.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs mt-2">
-                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
-                    <span>Complete all packing checklist items before completing packing.</span>
+                {packingHistory.map((item) => (
+                  <div
+                    key={`ph-${item.id}`}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between text-xs py-1.5 gap-1"
+                  >
+                    <div>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                        {item.to_status === "delivered"
+                          ? "Consignment Delivered"
+                          : item.to_status === "dispatched"
+                          ? "Shipment Dispatched"
+                          : item.to_status === "in_progress"
+                          ? "Delivery Preparation Started"
+                          : `Status: ${item.to_status}`}
+                      </span>
+                      {item.note && (
+                        <p className="text-slate-500 dark:text-slate-400 mt-0.5">{item.note}</p>
+                      )}
+                    </div>
+                    <div className="text-slate-400 shrink-0 text-[11px]">
+                      {formatDate(item.created_at, true)}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Remarks Card (1 col) */}
-        <Card className="border-slate-200 flex flex-col">
-          <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <Edit3 className="h-4 w-4 text-slate-600" />
-                Packing Remarks
-              </CardTitle>
-              {packingRecord && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setRemarksInput(packingRecord.remarks || "");
-                    setIsRemarksDialogOpen(true);
-                  }}
-                  className="h-7 px-2 text-xs text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50"
-                >
-                  Edit
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 flex-1 flex flex-col justify-between">
-            <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
-              {packingRecord?.remarks || "No packing remarks recorded yet."}
-            </p>
-            {packingRecord?.started_at && (
-              <div className="pt-4 border-t border-slate-100 text-[11px] text-slate-400 mt-4">
-                Packing started: {formatDate(packingRecord.started_at, true)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          </div>
+        )}
       </div>
 
-      {/* Historical Quantity Overview */}
-      <Card className="border-slate-200">
-        <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-emerald-600" />
-                Historical Quantity Overview
-              </CardTitle>
-              <CardDescription className="text-xs mt-0.5">
-                Authoritative snapshot locked upon order confirmation. Dynamic items reflect stored historical configuration.
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 text-xs px-2.5 py-1">
-                Total Students: <span className="font-bold ml-1">{totalStudents}</span>
-              </Badge>
-              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs px-2.5 py-1">
-                Total Items: <span className="font-bold ml-1">{totalItemsCount}</span>
-              </Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {dynamicItems.map((item, idx) => (
-              <div
-                key={idx}
-                className="p-3 rounded-lg border border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 transition-colors"
-              >
-                <p className="text-xs font-medium text-slate-600 truncate" title={item.itemName}>
-                  {formatItemName(item.itemName)}
-                </p>
-                <p className="text-xl font-bold text-slate-900 mt-1">{item.totalQuantity}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  {item.studentCount !== null ? `${item.studentCount} students` : "quantity only"}
-                </p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Tabs: Breakdown & Timeline */}
-      <Tabs defaultValue="breakdown" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="breakdown" className="flex items-center gap-1.5 text-xs">
-            <Layers className="h-4 w-4" />
-            Quantity Breakdown
-          </TabsTrigger>
-          <TabsTrigger value="timeline" className="flex items-center gap-1.5 text-xs">
-            <History className="h-4 w-4" />
-            Delivery Timeline
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Tab 1: Breakdown */}
-        <TabsContent value="breakdown" className="mt-4">
-          <AdminOrderQuantityBreakdown
-            requirementItems={requirementItems}
-            orderNumber={order.order_number}
-            schoolName={order.schools?.name || "School"}
-          />
-        </TabsContent>
-
-        {/* Tab 2: Timeline */}
-        <TabsContent value="timeline" className="mt-4 space-y-4">
-          {/* Order Status History */}
-          <Card className="border-slate-200">
-            <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
-              <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <Truck className="h-4 w-4 text-purple-600" />
-                Lifecycle Transitions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              {orderStatusHistory.length === 0 ? (
-                <p className="text-xs text-slate-500 py-4 text-center">No lifecycle history available.</p>
-              ) : (
-                <div className="space-y-3">
-                  {orderStatusHistory.map((hist) => (
-                    <div
-                      key={hist.id}
-                      className="flex items-start justify-between py-2 border-b border-slate-100 last:border-0 text-xs"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-900 uppercase text-[11px] tracking-wider">
-                            {hist.status.replace("_", " ")}
-                          </span>
-                        </div>
-                        {hist.note && <p className="text-slate-600 italic mt-0.5">{hist.note}</p>}
-                      </div>
-                      <span className="text-slate-400 whitespace-nowrap ml-4">
-                        {formatDate(hist.created_at, true)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Packing Audit History */}
-          <Card className="border-slate-200">
-            <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
-              <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <Package className="h-4 w-4 text-emerald-600" />
-                Packing Audit Trail
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              {packingHistory.length === 0 ? (
-                <p className="text-xs text-slate-500 py-4 text-center">No packing history available.</p>
-              ) : (
-                <div className="space-y-3">
-                  {packingHistory.map((hist) => (
-                    <div
-                      key={hist.id}
-                      className="flex items-start justify-between py-2 border-b border-slate-100 last:border-0 text-xs"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800">
-                            {hist.from_status ? `${hist.from_status} → ` : ""}
-                            {hist.to_status}
-                          </span>
-                          {hist.profiles?.full_name && (
-                            <span className="text-slate-400">• By {hist.profiles.full_name}</span>
-                          )}
-                        </div>
-                        {hist.note && <p className="text-slate-600 mt-0.5">{hist.note}</p>}
-                      </div>
-                      <span className="text-slate-400 whitespace-nowrap ml-4">
-                        {formatDate(hist.created_at, true)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* ============================================================ */}
-      {/* DIALOGS */}
-      {/* ============================================================ */}
-
-      {/* 1. Start Packing Dialog */}
-      <Dialog open={isStartDialogOpen} onOpenChange={setIsStartDialogOpen}>
-        <DialogContent className="sm:max-w-[450px]">
+      {/* MODAL 1: Start Delivery Confirmation (Section 12) */}
+      <Dialog open={showStartModal} onOpenChange={setShowStartModal}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Start Packing Process</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Play className="h-5 w-5 text-evenvibe-primary" />
+              Start Delivery
+            </DialogTitle>
             <DialogDescription>
-              Initiate packing for Order {order.order_number}. This will create the official packing record and seed standard checklist items.
+              Start delivery preparation for Order #{order.order_number}?
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
-            <div className="space-y-1.5">
-              <Label htmlFor="startRemarks">Initial Remarks (Optional)</Label>
+
+          <div className="space-y-4 py-2">
+            <div className="p-3 bg-evenvibe-light dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-600">Approved Units:</span>
+                <span className="font-bold text-evenvibe-deep">{totalApprovedQuantity}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-600">Distinct Sizes:</span>
+                <span className="font-bold text-slate-800">{deliveryItems.length}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="startRemarks" className="text-xs">
+                Delivery Remarks (optional)
+              </Label>
               <Textarea
                 id="startRemarks"
-                placeholder="e.g. Assigned to packing station B..."
+                placeholder="e.g. Packing into cartons for morning dispatch"
                 value={startRemarks}
                 onChange={(e) => setStartRemarks(e.target.value)}
-                rows={3}
+                rows={2}
+                className="text-xs"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsStartDialogOpen(false)}>
-              Cancel
-            </Button>
+
+          <DialogFooter className="gap-2">
             <Button
-              onClick={handleStartPacking}
+              variant="outline"
+              onClick={() => setShowStartModal(false)}
               disabled={isStarting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
-              {isStarting ? "Starting..." : "Confirm & Start Packing"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 2. Update Progress Dialog */}
-      <Dialog open={isProgressDialogOpen} onOpenChange={setIsProgressDialogOpen}>
-        <DialogContent className="sm:max-w-[450px]">
-          <DialogHeader>
-            <DialogTitle>Update Packing Progress</DialogTitle>
-            <DialogDescription>
-              Enter the current number of verified and packed items for this order.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleUpdateProgress} className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-baseline">
-                <Label htmlFor="packedQtyInput">Packed Quantity</Label>
-                <span className="text-xs text-muted-foreground">Total: {totalQuantity}</span>
-              </div>
-              <Input
-                id="packedQtyInput"
-                type="number"
-                min={0}
-                max={totalQuantity}
-                value={packedQtyInput}
-                onChange={(e) => setPackedQtyInput(parseInt(e.target.value) || 0)}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="progressNote">Progress Note (Optional)</Label>
-              <Input
-                id="progressNote"
-                placeholder="e.g. Boxed 50 shirts..."
-                value={progressNote}
-                onChange={(e) => setProgressNote(e.target.value)}
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsProgressDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isUpdatingProgress} className="bg-blue-600 hover:bg-blue-700 text-white">
-                {isUpdatingProgress ? "Saving..." : "Save Progress"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* 3. Complete Packing Dialog */}
-      <Dialog open={isCompleteDialogOpen} onOpenChange={setIsCompleteDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>Complete Packing</DialogTitle>
-            <DialogDescription>
-              Finalize packing for Order {order.order_number}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-md space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Order Quantity:</span>
-                <span className="font-semibold text-slate-800">{totalQuantity}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Packed Quantity:</span>
-                <span className="font-semibold text-emerald-700">{packedQuantity}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Checklist Status:</span>
-                <span className="font-semibold text-emerald-700">5 / 5 Completed</span>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="completeRemarks">Final Remarks (Optional)</Label>
-              <Textarea
-                id="completeRemarks"
-                placeholder="e.g. All cartons sealed and labeled for dispatch."
-                value={completeRemarks}
-                onChange={(e) => setCompleteRemarks(e.target.value)}
-                rows={3}
-              />
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              Once completed, the order will remain in <span className="font-semibold text-slate-800">Packed</span> status and be unlocked for Courier Dispatch.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCompleteDialogOpen(false)}>
               Cancel
             </Button>
             <Button
-              onClick={handleCompletePacking}
-              disabled={isCompleting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleStartDelivery}
+              disabled={isStarting}
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
             >
-              {isCompleting ? "Completing..." : "Confirm & Complete"}
+              {isStarting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Start Delivery"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 4. Dispatch Dialog */}
-      <Dialog open={isDispatchDialogOpen} onOpenChange={setIsDispatchDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+      {/* MODAL 2: Mark as Dispatched Confirmation (Section 15) */}
+      <Dialog open={showDispatchModal} onOpenChange={setShowDispatchModal}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Dispatch Order</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-evenvibe-primary" />
+              Mark as Dispatched
+            </DialogTitle>
             <DialogDescription>
-              Assign shipping courier details to dispatch Order {order.order_number}.
+              Dispatch shipment for Order #{order.order_number}.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleDispatchOrder} className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="courierName">Courier Name *</Label>
+
+          <div className="space-y-3 py-2 text-xs">
+            <div className="space-y-1">
+              <Label htmlFor="modalCourier" className="text-xs">
+                Delivery Partner
+              </Label>
               <Input
-                id="courierName"
-                placeholder="e.g. Blue Dart, Delhivery, DTDC..."
+                id="modalCourier"
+                placeholder="e.g. Blue Dart"
                 value={courierName}
                 onChange={(e) => setCourierName(e.target.value)}
-                required
+                className="h-8 text-xs"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="trackingNumber">Tracking Number *</Label>
+
+            <div className="space-y-1">
+              <Label htmlFor="modalTracking" className="text-xs">
+                Tracking Number
+              </Label>
               <Input
-                id="trackingNumber"
-                placeholder="e.g. BD987654321IN"
+                id="modalTracking"
+                placeholder="e.g. TRK987654"
                 value={trackingNumber}
                 onChange={(e) => setTrackingNumber(e.target.value)}
-                required
+                className="h-8 text-xs font-mono"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="estimatedDelivery">Estimated Delivery Date *</Label>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="modalDate" className="text-xs">
+                  Estimated Delivery Date
+                </Label>
+                <span className="text-[10px] text-slate-400">Today or future</span>
+              </div>
               <Input
-                id="estimatedDelivery"
+                id="modalDate"
                 type="date"
+                min={todayDateStr}
                 value={estimatedDelivery}
-                onChange={(e) => setEstimatedDelivery(e.target.value)}
-                required
+                onChange={(e) => handleDateChange(e.target.value)}
+                className={`h-8 text-xs ${dateError ? "border-status-error focus-visible:ring-red-400" : ""}`}
               />
-            </div>
-
-            <div className="p-2.5 rounded-md bg-purple-50 border border-purple-200 text-purple-800 text-xs">
-              <p className="font-medium">Once dispatched, the order will move to Dispatched.</p>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDispatchDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isDispatching} className="bg-purple-600 hover:bg-purple-700 text-white">
-                {isDispatching ? "Dispatching..." : "Confirm Dispatch"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* 5. Mark In Transit Dialog */}
-      <Dialog open={isTransitDialogOpen} onOpenChange={setIsTransitDialogOpen}>
-        <DialogContent className="sm:max-w-[450px]">
-          <DialogHeader>
-            <DialogTitle>Mark Order In Transit</DialogTitle>
-            <DialogDescription>
-              Update status for Order {order.order_number} to In Transit once the courier pickup is confirmed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
-            <div className="space-y-1.5">
-              <Label htmlFor="transitNote">Transit Note (Optional)</Label>
-              <Input
-                id="transitNote"
-                placeholder="e.g. Package scanned at primary sorting hub..."
-                value={transitNote}
-                onChange={(e) => setTransitNote(e.target.value)}
-              />
+              {dateError && (
+                <p className="text-[11px] text-status-error font-medium flex items-center gap-1 mt-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {dateError}
+                </p>
+              )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsTransitDialogOpen(false)}>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowDispatchModal(false)}
+              disabled={isDispatching}
+            >
               Cancel
             </Button>
             <Button
-              onClick={handleMarkInTransit}
-              disabled={isMarkingTransit}
-              className="bg-sky-600 hover:bg-sky-700 text-white"
+              onClick={handleDispatchOrder}
+              disabled={isDispatching}
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
             >
-              {isMarkingTransit ? "Updating..." : "Confirm In Transit"}
+              {isDispatching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Dispatch"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 6. Mark Delivered Dialog */}
-      <Dialog open={isDeliveredDialogOpen} onOpenChange={setIsDeliveredDialogOpen}>
-        <DialogContent className="sm:max-w-[450px]">
+      {/* MODAL 3: Mark as Delivered Confirmation (Section 16) */}
+      <Dialog open={showDeliveredModal} onOpenChange={setShowDeliveredModal}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Mark Order Delivered</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-evenvibe-primary" />
+              Mark as Delivered
+            </DialogTitle>
             <DialogDescription>
-              Confirm delivery for Order {order.order_number}. This will set the final delivered timestamp.
+              Confirm that Order #{order.order_number} has been received by {order.schools?.name || "the school"}.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
-            <div className="space-y-1.5">
-              <Label htmlFor="deliveredNote">Delivery Note (Optional)</Label>
-              <Input
-                id="deliveredNote"
-                placeholder="e.g. Received and signed by school authority..."
-                value={deliveredNote}
-                onChange={(e) => setDeliveredNote(e.target.value)}
-              />
+
+          <div className="py-2 text-xs space-y-2">
+            <div className="p-3 bg-evenvibe-light dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+              <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                Total Delivered: {totalApprovedQuantity} units
+              </p>
+              <p className="text-slate-500 mt-1">
+                This will finalize the order delivery cycle and update order status to <strong>Delivered</strong>.
+              </p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeliveredDialogOpen(false)}>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeliveredModal(false)}
+              disabled={isMarkingDelivered}
+            >
               Cancel
             </Button>
             <Button
               onClick={handleMarkDelivered}
               disabled={isMarkingDelivered}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
             >
-              {isMarkingDelivered ? "Updating..." : "Confirm Delivered"}
+              {isMarkingDelivered ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Delivered"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 7. Edit Remarks Dialog */}
-      <Dialog open={isRemarksDialogOpen} onOpenChange={setIsRemarksDialogOpen}>
-        <DialogContent className="sm:max-w-[450px]">
+      {/* MODAL 4: Delete Delivery Proof Image Confirmation */}
+      <Dialog open={Boolean(imageToDelete)} onOpenChange={(open) => !open && setImageToDelete(null)}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Packing Remarks</DialogTitle>
-            <DialogDescription>Update the remarks for this packing record.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2 text-status-error">
+              <Trash2 className="h-5 w-5" />
+              Delete Delivery Proof Image
+            </DialogTitle>
+            <DialogDescription>
+              Delete this delivery proof image? This action cannot be undone and will permanently remove the image from storage.
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleUpdateRemarks} className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="remarksInput">Remarks</Label>
-              <Textarea
-                id="remarksInput"
-                placeholder="Enter remarks..."
-                value={remarksInput}
-                onChange={(e) => setRemarksInput(e.target.value)}
-                rows={4}
-                required
-              />
+
+          {imageToDelete && (
+            <div className="py-2 text-xs flex items-center gap-3 bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+              {imageToDelete.signed_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageToDelete.signed_url}
+                  alt={imageToDelete.file_name}
+                  className="w-12 h-12 rounded object-cover"
+                />
+              )}
+              <div className="truncate">
+                <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                  {imageToDelete.caption || imageToDelete.file_name}
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Uploaded {formatDate(imageToDelete.created_at, true)}
+                </p>
+              </div>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsRemarksDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isUpdatingRemarks} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                {isUpdatingRemarks ? "Saving..." : "Save Remarks"}
-              </Button>
-            </DialogFooter>
-          </form>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setImageToDelete(null)}
+              disabled={isDeletingImage}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteProof}
+              disabled={isDeletingImage}
+            >
+              {isDeletingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete Image"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lightbox / Full-size Image Viewer */}
+      {lightboxIndex !== null && (
+        <DeliveryProofLightbox
+          isOpen={lightboxIndex !== null}
+          onClose={() => setLightboxIndex(null)}
+          images={proofImages}
+          currentIndex={lightboxIndex}
+          onIndexChange={(newIdx) => setLightboxIndex(newIdx)}
+        />
+      )}
     </div>
   );
 }

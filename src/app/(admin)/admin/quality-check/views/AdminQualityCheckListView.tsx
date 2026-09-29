@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, ClipboardCheck, ChevronLeft, ChevronRight, Eye, Play } from "lucide-react";
 import Link from "next/link";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 const formatDate = (dateString: string, includeTime = false) => {
   if (!dateString) return "—";
@@ -28,6 +29,7 @@ const QC_STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
   in_progress: "In Progress",
   passed: "Passed",
+  completed: "QC Completed",
   failed: "Failed",
 };
 
@@ -40,6 +42,7 @@ const getQCBadgeColor = (status: string) => {
     case "in_progress":
       return "bg-blue-100 text-blue-800 border-blue-200";
     case "passed":
+    case "completed":
       return "bg-emerald-100 text-emerald-800 border-emerald-200";
     case "failed":
       return "bg-rose-100 text-rose-800 border-rose-200";
@@ -194,7 +197,7 @@ export default function AdminQualityCheckListView({
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <ClipboardCheck className="h-6 w-6 text-emerald-600" />
+            <ClipboardCheck className="h-6 w-6 text-evenvibe-primary" />
             Quality Check Management
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -212,7 +215,7 @@ export default function AdminQualityCheckListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "all"
-              ? "border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600"
+              ? "border-evenvibe-primary bg-emerald-50/50 ring-1 ring-emerald-600"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
@@ -227,7 +230,7 @@ export default function AdminQualityCheckListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "ready_for_qc"
-              ? "border-amber-500 bg-amber-50/50 ring-1 ring-amber-500"
+              ? "border-status-warning bg-amber-50/50 ring-1 ring-status-warning"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
@@ -257,12 +260,12 @@ export default function AdminQualityCheckListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "passed"
-              ? "border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600"
+              ? "border-evenvibe-primary bg-emerald-50/50 ring-1 ring-emerald-600"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
           <p className="text-xs font-medium text-slate-500">Passed</p>
-          <p className="text-xl font-bold text-emerald-700 mt-1">{statusCounts.passed}</p>
+          <p className="text-xl font-bold text-evenvibe-deep mt-1">{statusCounts.passed}</p>
         </button>
 
         <button
@@ -272,7 +275,7 @@ export default function AdminQualityCheckListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "failed"
-              ? "border-rose-600 bg-rose-50/50 ring-1 ring-rose-600"
+              ? "border-status-error bg-rose-50/50 ring-1 ring-status-error"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
@@ -402,7 +405,8 @@ export default function AdminQualityCheckListView({
             </CardDescription>
           </div>
         </CardHeader>
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
@@ -431,7 +435,7 @@ export default function AdminQualityCheckListView({
                     <TableCell className="font-medium text-slate-900">
                       <Link
                         href={`/admin/quality-check/${o.id}`}
-                        className="hover:underline text-emerald-700 font-semibold"
+                        className="hover:underline text-evenvibe-deep font-semibold"
                       >
                         {o.orderNumber}
                       </Link>
@@ -464,7 +468,7 @@ export default function AdminQualityCheckListView({
                         <Link href={`/admin/quality-check/${o.id}`}>
                           <Button
                             size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 h-8 text-xs font-medium"
+                            className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white gap-1 h-8 text-xs font-medium"
                           >
                             <Play className="h-3.5 w-3.5" />
                             Start QC
@@ -490,13 +494,80 @@ export default function AdminQualityCheckListView({
           </Table>
         </div>
 
+        {/* Mobile Cards View */}
+        <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+          {orders.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-sm">
+              {isFiltering
+                ? "No orders match your filter criteria."
+                : "No orders are currently under or ready for Quality Check."}
+            </div>
+          ) : (
+            orders.map((o) => (
+              <MobileCard key={o.id}>
+                <MobileCardField
+                  label="Order Number"
+                  value={
+                    <Link
+                      href={`/admin/quality-check/${o.id}`}
+                      className="text-evenvibe-deep font-bold hover:underline"
+                    >
+                      {o.orderNumber}
+                    </Link>
+                  }
+                />
+                <MobileCardField label="School" value={o.schoolName} />
+                <MobileCardField label="Order Date" value={formatDate(o.createdAt)} />
+                <MobileCardField label="Total Students" value={<span className="font-semibold">{o.totalStudents}</span>} />
+                <MobileCardField label="Total Items" value={<span className="font-semibold">{o.totalItems}</span>} />
+                <MobileCardField
+                  label="QC Status"
+                  value={
+                    <Badge
+                      variant="outline"
+                      className={`text-xs px-2 py-0.5 font-medium ${getQCBadgeColor(o.qcStatus)}`}
+                    >
+                      {QC_STATUS_LABELS[o.qcStatus] || o.qcStatus}
+                    </Badge>
+                  }
+                />
+                <MobileCardField label="Last Updated" value={formatDate(o.updatedAt, true)} />
+                <MobileCardActions label="Action">
+                  {o.qcStatus === "ready_for_qc" || o.qcStatus === "pending" ? (
+                    <Link href={`/admin/quality-check/${o.id}`} className="w-full">
+                      <Button
+                        size="sm"
+                        className="w-full bg-evenvibe-primary hover:bg-evenvibe-deep text-white gap-1.5 h-8 text-xs font-medium justify-center"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                        Start QC
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link href={`/admin/quality-check/${o.id}`} className="w-full">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full border-slate-300 hover:bg-slate-100 gap-1.5 h-8 text-xs font-medium justify-center"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        View QC
+                      </Button>
+                    </Link>
+                  )}
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
+        </div>
+
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
+          <div className="flex flex-col sm:flex-row gap-2 items-center justify-between px-4 py-3 border-t bg-slate-50/50">
             <p className="text-xs text-muted-foreground">
               Page {currentPage} of {totalPages}
             </p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 w-full sm:w-auto justify-end">
               <Button
                 variant="outline"
                 size="sm"

@@ -30,7 +30,7 @@ interface EditFormProps {
 }
 
 function EditTcStudentForm({ tcStudent, onClose, onSuccess }: EditFormProps) {
-  const [tcNumber, setTcNumber] = useState(tcStudent.tc_number);
+  const [tcDate, setTcDate] = useState(tcStudent.tc_date || "");
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -40,21 +40,21 @@ function EditTcStudentForm({ tcStudent, onClose, onSuccess }: EditFormProps) {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const trimmed = tcNumber.trim();
+    const trimmed = tcDate.trim();
     if (!trimmed) {
-      setErrorMsg("TC Number is required.");
+      setErrorMsg("TC Date is required.");
       return;
     }
 
     startTransition(async () => {
       const res = await updateTcStudent(tcStudent.id, {
-        tc_number: trimmed,
+        tc_date: trimmed,
       });
 
       if (!res.success) {
         setErrorMsg(res.error || "Failed to update TC record.");
       } else {
-        setSuccessMsg("TC number updated successfully.");
+        setSuccessMsg("TC date updated successfully.");
         setTimeout(() => {
           onClose();
           if (onSuccess) {
@@ -69,15 +69,15 @@ function EditTcStudentForm({ tcStudent, onClose, onSuccess }: EditFormProps) {
     <>
       <DialogHeader>
         <div className="flex items-center gap-2 text-slate-900">
-          <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
+          <div className="p-2 rounded-lg bg-amber-50 text-status-warning">
             <Edit2 className="h-5 w-5" />
           </div>
           <div>
             <DialogTitle className="text-xl font-bold">
-              Edit TC Number
+              Edit TC Date
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500 mt-0.5">
-              Update Transfer Certificate number for {tcStudent.student.student_name}
+              Update Transfer Certificate date for {tcStudent.student.student_name}
             </DialogDescription>
           </div>
         </div>
@@ -85,14 +85,14 @@ function EditTcStudentForm({ tcStudent, onClose, onSuccess }: EditFormProps) {
 
       {errorMsg && (
         <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-          <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <AlertCircle className="h-5 w-5 text-status-error shrink-0 mt-0.5" />
           <div className="flex-1">{errorMsg}</div>
         </div>
       )}
 
       {successMsg && (
-        <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm">
-          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+        <div className="flex items-center gap-2.5 p-3.5 bg-evenvibe-light border border-emerald-200 text-evenvibe-deep rounded-lg text-sm">
+          <CheckCircle2 className="h-5 w-5 text-status-success shrink-0" />
           <div className="flex-1 font-medium">{successMsg}</div>
         </div>
       )}
@@ -132,21 +132,25 @@ function EditTcStudentForm({ tcStudent, onClose, onSuccess }: EditFormProps) {
           </div>
         </div>
 
-        {/* EDITABLE TC NUMBER */}
+        {/* EDITABLE TC DATE */}
         <div className="space-y-1.5 pt-1">
-          <Label htmlFor="edit_tc_number" className="text-sm font-semibold text-slate-900">
-            TC Number *
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="edit_tc_date" className="text-sm font-semibold text-slate-900">
+              TC Date *
+            </Label>
+            <span className="text-xs text-status-error font-medium">Required</span>
+          </div>
           <Input
-            id="edit_tc_number"
-            value={tcNumber}
-            onChange={(e) => setTcNumber(e.target.value)}
+            id="edit_tc_date"
+            type="date"
+            value={tcDate}
+            onChange={(e) => setTcDate(e.target.value)}
             className="bg-white"
             required
             autoFocus
           />
           <p className="text-xs text-slate-500">
-            Must be unique within your school.
+            Date of Transfer Certificate issuance.
           </p>
         </div>
 
@@ -161,13 +165,13 @@ function EditTcStudentForm({ tcStudent, onClose, onSuccess }: EditFormProps) {
           </Button>
           <Button
             type="submit"
-            disabled={isPending || !tcNumber.trim()}
-            className="bg-slate-900 hover:bg-slate-800 text-white font-medium"
+            disabled={isPending || !tcDate.trim()}
+            className="bg-status-warning hover:bg-amber-700 text-white font-medium"
           >
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                Updating...
               </>
             ) : (
               "Save Changes"
@@ -185,17 +189,17 @@ export function EditTcStudentDialog({
   onOpenChange,
   onSuccess,
 }: EditTcStudentDialogProps) {
+  if (!tcStudent) return null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        {tcStudent && (
-          <EditTcStudentForm
-            key={tcStudent.id + tcStudent.tc_number}
-            tcStudent={tcStudent}
-            onClose={() => onOpenChange(false)}
-            onSuccess={onSuccess}
-          />
-        )}
+      <DialogContent className="max-w-md">
+        <EditTcStudentForm
+          key={tcStudent.id + (tcStudent.tc_date || "")}
+          tcStudent={tcStudent}
+          onClose={() => onOpenChange(false)}
+          onSuccess={onSuccess}
+        />
       </DialogContent>
     </Dialog>
   );

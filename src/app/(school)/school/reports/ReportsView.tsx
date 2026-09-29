@@ -29,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 type ReportsViewProps = {
   filterOptions: {
@@ -236,7 +237,7 @@ export function ReportsView({
       case 'under_review': return <Badge className="bg-amber-100 text-amber-800 uppercase">Under Review</Badge>;
       case 'approved': return <Badge className="bg-emerald-100 text-emerald-800 uppercase">Approved</Badge>;
       case 'rejected': return <Badge className="bg-red-100 text-red-800 uppercase">Rejected</Badge>;
-      case 'rework': return <Badge className="bg-purple-100 text-purple-800 uppercase">Rework</Badge>;
+      case 'rework': return <Badge className="bg-evenvibe-light text-evenvibe-deep uppercase">Rework</Badge>;
       case 'completed':
       case 'delivered': return <Badge className="bg-slate-100 text-slate-800 uppercase">{status}</Badge>;
       default: return <Badge variant="outline" className="uppercase">{status.replace('_', ' ')}</Badge>;
@@ -300,7 +301,7 @@ export function ReportsView({
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                    <Shirt className="h-4 w-4 text-indigo-500" />
+                    <Shirt className="h-4 w-4 text-evenvibe-primary" />
                     Uniform Sizes
                   </h3>
                 </div>
@@ -379,7 +380,7 @@ export function ReportsView({
               <div className="p-6 space-y-6">
                 <div>
                   <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-3">
-                    <FileText className="h-4 w-4 text-blue-500" />
+                    <FileText className="h-4 w-4 text-status-info" />
                     Requirement Status
                   </h3>
                   {overview.currentRequirement ? (
@@ -396,7 +397,7 @@ export function ReportsView({
 
                 <div>
                   <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-3">
-                    <Package className="h-4 w-4 text-amber-500" />
+                    <Package className="h-4 w-4 text-status-warning" />
                     Order Status
                   </h3>
                   {overview.currentOrder ? (
@@ -413,7 +414,7 @@ export function ReportsView({
                 
                 <div>
                   <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-3">
-                    <AlertTriangle className="h-4 w-4 text-purple-500" />
+                    <AlertTriangle className="h-4 w-4 text-evenvibe-primary" />
                     Alterations
                   </h3>
                   <div className="flex items-center justify-between text-sm p-3 bg-slate-50 rounded-md border">
@@ -438,42 +439,78 @@ export function ReportsView({
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-slate-50">
-              <TableRow>
-                <TableHead>Student Name</TableHead>
-                <TableHead>Admission No</TableHead>
-                <TableHead>Class</TableHead>
-                <TableHead>Section</TableHead>
-                <TableHead>Gender</TableHead>
-                <TableHead>Size Status</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {students.map(s => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">{s.student_name}</TableCell>
-                  <TableCell className="font-mono text-xs">{s.admission_number}</TableCell>
-                  <TableCell>{s.class_name}</TableCell>
-                  <TableCell>{s.section}</TableCell>
-                  <TableCell>{s.gender}</TableCell>
-                  <TableCell>
-                    {s.is_complete ? (
-                      <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50">Completed</Badge>
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead>Student Name</TableHead>
+                  <TableHead>Admission No</TableHead>
+                  <TableHead>Class</TableHead>
+                  <TableHead>Section</TableHead>
+                  <TableHead>Gender</TableHead>
+                  <TableHead>Size Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {students.map(s => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{s.student_name}</TableCell>
+                    <TableCell className="font-mono text-xs">{s.admission_number}</TableCell>
+                    <TableCell>{s.class_name}</TableCell>
+                    <TableCell>{s.section}</TableCell>
+                    <TableCell>{s.gender}</TableCell>
+                    <TableCell>
+                      {s.is_complete ? (
+                        <Badge variant="outline" className="border-emerald-200 text-evenvibe-deep bg-evenvibe-light">Completed</Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50">Pending</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => setSearchQuery(s.admission_number)} className="h-8">
+                        View Details
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+            {students.map(s => (
+              <MobileCard key={s.id}>
+                <MobileCardField label="Student Name" value={s.student_name} />
+                <MobileCardField label="Admission No" value={<span className="font-mono text-xs">{s.admission_number}</span>} />
+                <MobileCardField label="Class" value={s.class_name} />
+                <MobileCardField label="Section" value={s.section || "—"} />
+                <MobileCardField label="Gender" value={s.gender} />
+                <MobileCardField
+                  label="Size Status"
+                  value={
+                    s.is_complete ? (
+                      <Badge variant="outline" className="border-emerald-200 text-evenvibe-deep bg-evenvibe-light">Completed</Badge>
                     ) : (
                       <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50">Pending</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => setSearchQuery(s.admission_number)} className="h-8">
-                      View Details
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    )
+                  }
+                />
+                <MobileCardActions label="Action">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSearchQuery(s.admission_number)}
+                    className="w-full text-evenvibe-primary border-emerald-200 hover:bg-emerald-50 h-8"
+                  >
+                    View Details
+                  </Button>
+                </MobileCardActions>
+              </MobileCard>
+            ))}
+          </div>
         </CardContent>
       </Card>
     );
@@ -486,7 +523,7 @@ export function ReportsView({
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
               School Admin Reports
-              {isRefreshing && <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />}
+              {isRefreshing && <Loader2 className="h-4 w-4 animate-spin text-evenvibe-primary" />}
             </h1>
             <p className="text-slate-500 mt-1">Complete student, uniform size, requirement, order and alteration reports.</p>
           </div>
@@ -507,7 +544,7 @@ export function ReportsView({
               handleExport(exportTab);
             }}
             disabled={isExporting}
-            className="bg-emerald-600 hover:bg-emerald-700"
+            className="bg-evenvibe-primary hover:bg-evenvibe-deep"
           >
             <Download className="h-4 w-4 mr-2" />
             {isExporting ? "Exporting..." : "Export Report"}
@@ -589,10 +626,10 @@ export function ReportsView({
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-500">Completed Sizes</p>
-                  <h3 className="text-2xl font-bold text-emerald-600">{overview.completedSizes}</h3>
+                  <h3 className="text-2xl font-bold text-evenvibe-primary">{overview.completedSizes}</h3>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  <CheckCircle2 className="h-5 w-5 text-evenvibe-primary" />
                 </div>
               </CardContent>
             </Card>
@@ -600,10 +637,10 @@ export function ReportsView({
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-500">Pending Sizes</p>
-                  <h3 className="text-2xl font-bold text-amber-600">{overview.pendingSizes}</h3>
+                  <h3 className="text-2xl font-bold text-status-warning">{overview.pendingSizes}</h3>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
-                  <AlertCircle className="h-5 w-5 text-amber-600" />
+                  <AlertCircle className="h-5 w-5 text-status-warning" />
                 </div>
               </CardContent>
             </Card>
@@ -611,10 +648,10 @@ export function ReportsView({
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-500">Completion %</p>
-                  <h3 className="text-2xl font-bold text-indigo-600">{overview.completionPercentage}%</h3>
+                  <h3 className="text-2xl font-bold text-evenvibe-primary">{overview.completionPercentage}%</h3>
                 </div>
-                <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                  <FileText className="h-5 w-5 text-indigo-600" />
+                <div className="h-10 w-10 rounded-full bg-evenvibe-light flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-evenvibe-primary" />
                 </div>
               </CardContent>
             </Card>
@@ -636,45 +673,83 @@ export function ReportsView({
                   <CardHeader className="py-4">
                     <CardTitle className="text-lg">Students Report</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0 overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Adm No</TableHead>
-                          <TableHead>Class</TableHead>
-                          <TableHead>Section</TableHead>
-                          <TableHead>Gender</TableHead>
-                          <TableHead>Size Status</TableHead>
-                          <TableHead className="text-right">Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {students.length === 0 ? (
+                  <CardContent className="p-0">
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
                           <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-slate-500">No students found.</TableCell>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Adm No</TableHead>
+                            <TableHead>Class</TableHead>
+                            <TableHead>Section</TableHead>
+                            <TableHead>Gender</TableHead>
+                            <TableHead>Size Status</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
                           </TableRow>
-                        ) : students.map(s => (
-                          <TableRow key={s.id}>
-                            <TableCell className="font-medium">{s.student_name}</TableCell>
-                            <TableCell className="font-mono text-xs">{s.admission_number}</TableCell>
-                            <TableCell>{s.class_name}</TableCell>
-                            <TableCell>{s.section}</TableCell>
-                            <TableCell>{s.gender}</TableCell>
-                            <TableCell>
-                              {s.is_complete ? (
-                                <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50">Completed</Badge>
+                        </TableHeader>
+                        <TableBody>
+                          {students.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="h-24 text-center text-slate-500">No students found.</TableCell>
+                            </TableRow>
+                          ) : students.map(s => (
+                            <TableRow key={s.id}>
+                              <TableCell className="font-medium">{s.student_name}</TableCell>
+                              <TableCell className="font-mono text-xs">{s.admission_number}</TableCell>
+                              <TableCell>{s.class_name}</TableCell>
+                              <TableCell>{s.section}</TableCell>
+                              <TableCell>{s.gender}</TableCell>
+                              <TableCell>
+                                {s.is_complete ? (
+                                  <Badge variant="outline" className="border-emerald-200 text-evenvibe-deep bg-evenvibe-light">Completed</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50">Pending</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="sm" onClick={() => setSearchQuery(s.admission_number)}>View Details</Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile Cards */}
+                    <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+                      {students.length === 0 ? (
+                        <div className="py-8 text-center text-slate-500 text-sm">No students found.</div>
+                      ) : students.map(s => (
+                        <MobileCard key={s.id}>
+                          <MobileCardField label="Student Name" value={s.student_name} />
+                          <MobileCardField label="Admission No" value={<span className="font-mono text-xs">{s.admission_number}</span>} />
+                          <MobileCardField label="Class" value={s.class_name} />
+                          <MobileCardField label="Section" value={s.section || "—"} />
+                          <MobileCardField label="Gender" value={s.gender} />
+                          <MobileCardField
+                            label="Size Status"
+                            value={
+                              s.is_complete ? (
+                                <Badge variant="outline" className="border-emerald-200 text-evenvibe-deep bg-evenvibe-light">Completed</Badge>
                               ) : (
                                 <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50">Pending</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="ghost" size="sm" onClick={() => setSearchQuery(s.admission_number)}>View Details</Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                              )
+                            }
+                          />
+                          <MobileCardActions label="Action">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSearchQuery(s.admission_number)}
+                              className="w-full text-evenvibe-primary border-emerald-200 hover:bg-emerald-50 h-8"
+                            >
+                              View Details
+                            </Button>
+                          </MobileCardActions>
+                        </MobileCard>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -684,34 +759,59 @@ export function ReportsView({
                   <CardHeader className="py-4">
                     <CardTitle className="text-lg">Uniform Size Summary</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0 overflow-x-auto">
-                    <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x">
+                  <CardContent className="p-0">
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x">
+                        {Object.keys(sizeSummary).length === 0 ? (
+                          <div className="col-span-2 p-8 text-center text-slate-500">No size data available.</div>
+                        ) : (
+                          Object.keys(sizeSummary).map(gender => (
+                            <div key={gender} className="p-6">
+                              <h3 className="text-sm font-bold text-slate-900 mb-4 tracking-wider uppercase">{gender}</h3>
+                              <Table>
+                                <TableHeader className="bg-slate-50">
+                                  <TableRow>
+                                    <TableHead>Item</TableHead>
+                                    <TableHead>Size</TableHead>
+                                    <TableHead className="text-right">Quantity</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {Object.keys(sizeSummary[gender]).map(item => (
+                                    Object.keys(sizeSummary[gender][item]).map(size => (
+                                      <TableRow key={`${item}-${size}`}>
+                                        <TableCell className="font-medium">{item}</TableCell>
+                                        <TableCell>{size}</TableCell>
+                                        <TableCell className="text-right">{sizeSummary[gender][item][size]}</TableCell>
+                                      </TableRow>
+                                    ))
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Mobile Cards View */}
+                    <div className="md:hidden space-y-4 p-3 bg-slate-50/50">
                       {Object.keys(sizeSummary).length === 0 ? (
-                        <div className="col-span-2 p-8 text-center text-slate-500">No size data available.</div>
+                        <div className="p-8 text-center text-slate-500 text-sm">No size data available.</div>
                       ) : (
                         Object.keys(sizeSummary).map(gender => (
-                          <div key={gender} className="p-6">
-                            <h3 className="text-sm font-bold text-slate-900 mb-4 tracking-wider uppercase">{gender}</h3>
-                            <Table>
-                              <TableHeader className="bg-slate-50">
-                                <TableRow>
-                                  <TableHead>Item</TableHead>
-                                  <TableHead>Size</TableHead>
-                                  <TableHead className="text-right">Quantity</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {Object.keys(sizeSummary[gender]).map(item => (
-                                  Object.keys(sizeSummary[gender][item]).map(size => (
-                                    <TableRow key={`${item}-${size}`}>
-                                      <TableCell className="font-medium">{item}</TableCell>
-                                      <TableCell>{size}</TableCell>
-                                      <TableCell className="text-right">{sizeSummary[gender][item][size]}</TableCell>
-                                    </TableRow>
-                                  ))
-                                ))}
-                              </TableBody>
-                            </Table>
+                          <div key={gender} className="space-y-3">
+                            <h3 className="text-xs font-bold text-slate-800 tracking-wider uppercase px-1">{gender}</h3>
+                            {Object.keys(sizeSummary[gender]).map(item =>
+                              Object.keys(sizeSummary[gender][item]).map(size => (
+                                <MobileCard key={`${gender}-${item}-${size}`}>
+                                  <MobileCardField label="Item" value={item} />
+                                  <MobileCardField label="Size" value={size} />
+                                  <MobileCardField label="Quantity" value={<span className="font-semibold text-slate-900">{sizeSummary[gender][item][size]}</span>} />
+                                </MobileCard>
+                              ))
+                            )}
                           </div>
                         ))
                       )}
@@ -725,41 +825,71 @@ export function ReportsView({
                   <CardHeader className="py-4">
                     <CardTitle className="text-lg">Pending Size Collection</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0 overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead>Student Name</TableHead>
-                          <TableHead>Adm No</TableHead>
-                          <TableHead>Class</TableHead>
-                          <TableHead>Section</TableHead>
-                          <TableHead>Gender</TableHead>
-                          <TableHead>Missing Items</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pendingSizes.length === 0 ? (
+                  <CardContent className="p-0">
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
                           <TableRow>
-                            <TableCell colSpan={8} className="h-24 text-center text-slate-500">All sizes collected!</TableCell>
+                            <TableHead>Student Name</TableHead>
+                            <TableHead>Adm No</TableHead>
+                            <TableHead>Class</TableHead>
+                            <TableHead>Section</TableHead>
+                            <TableHead>Gender</TableHead>
+                            <TableHead>Missing Items</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
                           </TableRow>
-                        ) : pendingSizes.map(s => (
-                          <TableRow key={s.id}>
-                            <TableCell className="font-medium">{s.student_name}</TableCell>
-                            <TableCell className="font-mono text-xs">{s.admission_number}</TableCell>
-                            <TableCell>{s.class_name}</TableCell>
-                            <TableCell>{s.section}</TableCell>
-                            <TableCell>{s.gender}</TableCell>
-                            <TableCell className="text-red-600">{s.missingItems}</TableCell>
-                            <TableCell><Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50">Pending</Badge></TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="ghost" size="sm" onClick={() => setSearchQuery(s.admission_number)}>View Details</Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {pendingSizes.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={8} className="h-24 text-center text-slate-500">All sizes collected!</TableCell>
+                            </TableRow>
+                          ) : pendingSizes.map(s => (
+                            <TableRow key={s.id}>
+                              <TableCell className="font-medium">{s.student_name}</TableCell>
+                              <TableCell className="font-mono text-xs">{s.admission_number}</TableCell>
+                              <TableCell>{s.class_name}</TableCell>
+                              <TableCell>{s.section}</TableCell>
+                              <TableCell>{s.gender}</TableCell>
+                              <TableCell className="text-status-error">{s.missingItems}</TableCell>
+                              <TableCell><Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50">Pending</Badge></TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="sm" onClick={() => setSearchQuery(s.admission_number)}>View Details</Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile Cards View */}
+                    <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+                      {pendingSizes.length === 0 ? (
+                        <div className="py-8 text-center text-slate-500 text-sm">All sizes collected!</div>
+                      ) : pendingSizes.map(s => (
+                        <MobileCard key={s.id}>
+                          <MobileCardField label="Student Name" value={s.student_name} />
+                          <MobileCardField label="Admission No" value={<span className="font-mono text-xs">{s.admission_number}</span>} />
+                          <MobileCardField label="Class" value={s.class_name} />
+                          <MobileCardField label="Section" value={s.section || "—"} />
+                          <MobileCardField label="Gender" value={s.gender} />
+                          <MobileCardField label="Missing Items" value={<span className="text-status-error text-xs font-medium">{s.missingItems}</span>} />
+                          <MobileCardField label="Status" value={<Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50">Pending</Badge>} />
+                          <MobileCardActions label="Action">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSearchQuery(s.admission_number)}
+                              className="w-full text-evenvibe-primary border-emerald-200 hover:bg-emerald-50 h-8"
+                            >
+                              View Details
+                            </Button>
+                          </MobileCardActions>
+                        </MobileCard>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -769,31 +899,48 @@ export function ReportsView({
                   <CardHeader className="py-4">
                     <CardTitle className="text-lg">Requirement History</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0 overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead>Requirement No</TableHead>
-                          <TableHead>Submitted Date</TableHead>
-                          <TableHead className="text-right">Total Students</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {requirements.length === 0 ? (
+                  <CardContent className="p-0">
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
                           <TableRow>
-                            <TableCell colSpan={4} className="h-24 text-center text-slate-500">No requirements found.</TableCell>
+                            <TableHead>Requirement No</TableHead>
+                            <TableHead>Submitted Date</TableHead>
+                            <TableHead className="text-right">Total Students</TableHead>
+                            <TableHead>Status</TableHead>
                           </TableRow>
-                        ) : requirements.map(r => (
-                          <TableRow key={r.id}>
-                            <TableCell className="font-mono font-medium">{r.requirement_number}</TableCell>
-                            <TableCell>{r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "N/A"}</TableCell>
-                            <TableCell className="text-right">{r.total_students}</TableCell>
-                            <TableCell>{renderStatusBadge(r.status)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {requirements.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="h-24 text-center text-slate-500">No requirements found.</TableCell>
+                            </TableRow>
+                          ) : requirements.map(r => (
+                            <TableRow key={r.id}>
+                              <TableCell className="font-mono font-medium">{r.requirement_number}</TableCell>
+                              <TableCell>{r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "N/A"}</TableCell>
+                              <TableCell className="text-right">{r.total_students}</TableCell>
+                              <TableCell>{renderStatusBadge(r.status)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile Cards View */}
+                    <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+                      {requirements.length === 0 ? (
+                        <div className="py-8 text-center text-slate-500 text-sm">No requirements found.</div>
+                      ) : requirements.map(r => (
+                        <MobileCard key={r.id}>
+                          <MobileCardField label="Requirement No" value={<span className="font-mono font-semibold text-slate-900">{r.requirement_number}</span>} />
+                          <MobileCardField label="Submitted Date" value={r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "N/A"} />
+                          <MobileCardField label="Total Students" value={<span className="font-semibold text-slate-900">{r.total_students}</span>} />
+                          <MobileCardField label="Status" value={renderStatusBadge(r.status)} />
+                        </MobileCard>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -803,35 +950,54 @@ export function ReportsView({
                   <CardHeader className="py-4">
                     <CardTitle className="text-lg">Order History</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0 overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead>Order No</TableHead>
-                          <TableHead>Requirement No</TableHead>
-                          <TableHead>Courier</TableHead>
-                          <TableHead>Tracking</TableHead>
-                          <TableHead>Est. Delivery</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {orders.length === 0 ? (
+                  <CardContent className="p-0">
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
                           <TableRow>
-                            <TableCell colSpan={6} className="h-24 text-center text-slate-500">No orders found.</TableCell>
+                            <TableHead>Order No</TableHead>
+                            <TableHead>Requirement No</TableHead>
+                            <TableHead>Courier</TableHead>
+                            <TableHead>Tracking</TableHead>
+                            <TableHead>Est. Delivery</TableHead>
+                            <TableHead>Status</TableHead>
                           </TableRow>
-                        ) : orders.map(o => (
-                          <TableRow key={o.id}>
-                            <TableCell className="font-mono font-medium">{o.order_number}</TableCell>
-                            <TableCell className="font-mono text-slate-500 text-xs">{o.requirement_number}</TableCell>
-                            <TableCell>{o.courier_name || "-"}</TableCell>
-                            <TableCell className="font-mono text-xs">{o.tracking_number || "-"}</TableCell>
-                            <TableCell>{o.estimated_delivery ? new Date(o.estimated_delivery).toLocaleDateString() : "-"}</TableCell>
-                            <TableCell>{renderStatusBadge(o.status)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {orders.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={6} className="h-24 text-center text-slate-500">No orders found.</TableCell>
+                            </TableRow>
+                          ) : orders.map(o => (
+                            <TableRow key={o.id}>
+                              <TableCell className="font-mono font-medium">{o.order_number}</TableCell>
+                              <TableCell className="font-mono text-slate-500 text-xs">{o.requirement_number}</TableCell>
+                              <TableCell>{o.courier_name || "-"}</TableCell>
+                              <TableCell className="font-mono text-xs">{o.tracking_number || "-"}</TableCell>
+                              <TableCell>{o.estimated_delivery ? new Date(o.estimated_delivery).toLocaleDateString() : "-"}</TableCell>
+                              <TableCell>{renderStatusBadge(o.status)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile Cards View */}
+                    <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+                      {orders.length === 0 ? (
+                        <div className="py-8 text-center text-slate-500 text-sm">No orders found.</div>
+                      ) : orders.map(o => (
+                        <MobileCard key={o.id}>
+                          <MobileCardField label="Order No" value={<span className="font-mono font-semibold text-slate-900">{o.order_number}</span>} />
+                          <MobileCardField label="Requirement No" value={<span className="font-mono text-xs">{o.requirement_number || "—"}</span>} />
+                          <MobileCardField label="Courier" value={o.courier_name || "—"} />
+                          <MobileCardField label="Tracking #" value={<span className="font-mono text-xs">{o.tracking_number || "—"}</span>} />
+                          <MobileCardField label="Est. Delivery" value={o.estimated_delivery ? new Date(o.estimated_delivery).toLocaleDateString() : "—"} />
+                          <MobileCardField label="Status" value={renderStatusBadge(o.status)} />
+                        </MobileCard>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -841,43 +1007,66 @@ export function ReportsView({
                   <CardHeader className="py-4">
                     <CardTitle className="text-lg">Alterations & Rework</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0 overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead>Request No</TableHead>
-                          <TableHead>Student</TableHead>
-                          <TableHead>Adm No</TableHead>
-                          <TableHead>Class</TableHead>
-                          <TableHead>Section</TableHead>
-                          <TableHead>Gender</TableHead>
-                          <TableHead>Item</TableHead>
-                          <TableHead>Issue</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Date</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {alterations.length === 0 ? (
+                  <CardContent className="p-0">
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
                           <TableRow>
-                            <TableCell colSpan={10} className="h-24 text-center text-slate-500">No alteration records found.</TableCell>
+                            <TableHead>Request No</TableHead>
+                            <TableHead>Student</TableHead>
+                            <TableHead>Adm No</TableHead>
+                            <TableHead>Class</TableHead>
+                            <TableHead>Section</TableHead>
+                            <TableHead>Gender</TableHead>
+                            <TableHead>Item</TableHead>
+                            <TableHead>Issue</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Date</TableHead>
                           </TableRow>
-                        ) : alterations.map(a => (
-                          <TableRow key={a.id}>
-                            <TableCell className="font-mono text-xs font-medium">{a.request_number}</TableCell>
-                            <TableCell className="font-medium">{a.student_name}</TableCell>
-                            <TableCell className="font-mono text-xs">{a.admission_number}</TableCell>
-                            <TableCell>{a.class_name}</TableCell>
-                            <TableCell>{a.section}</TableCell>
-                            <TableCell>{a.gender}</TableCell>
-                            <TableCell>{a.item_type}</TableCell>
-                            <TableCell className="max-w-[200px] truncate" title={a.issue_type}>{a.issue_type}</TableCell>
-                            <TableCell>{renderStatusBadge(a.status)}</TableCell>
-                            <TableCell>{new Date(a.created_at).toLocaleDateString()}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {alterations.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={10} className="h-24 text-center text-slate-500">No alteration records found.</TableCell>
+                            </TableRow>
+                          ) : alterations.map(a => (
+                            <TableRow key={a.id}>
+                              <TableCell className="font-mono text-xs font-medium">{a.request_number}</TableCell>
+                              <TableCell className="font-medium">{a.student_name}</TableCell>
+                              <TableCell className="font-mono text-xs">{a.admission_number}</TableCell>
+                              <TableCell>{a.class_name}</TableCell>
+                              <TableCell>{a.section}</TableCell>
+                              <TableCell>{a.gender}</TableCell>
+                              <TableCell>{a.item_type}</TableCell>
+                              <TableCell className="max-w-[200px] truncate" title={a.issue_type}>{a.issue_type}</TableCell>
+                              <TableCell>{renderStatusBadge(a.status)}</TableCell>
+                              <TableCell>{new Date(a.created_at).toLocaleDateString()}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile Cards View */}
+                    <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+                      {alterations.length === 0 ? (
+                        <div className="py-8 text-center text-slate-500 text-sm">No alteration records found.</div>
+                      ) : alterations.map(a => (
+                        <MobileCard key={a.id}>
+                          <MobileCardField label="Request No" value={<span className="font-mono text-xs font-semibold text-slate-900">{a.request_number}</span>} />
+                          <MobileCardField label="Student" value={a.student_name} />
+                          <MobileCardField label="Admission No" value={<span className="font-mono text-xs">{a.admission_number}</span>} />
+                          <MobileCardField label="Class" value={a.class_name} />
+                          <MobileCardField label="Section" value={a.section || "—"} />
+                          <MobileCardField label="Gender" value={a.gender} />
+                          <MobileCardField label="Item" value={a.item_type} />
+                          <MobileCardField label="Issue" value={<span className="text-xs">{a.issue_type}</span>} />
+                          <MobileCardField label="Status" value={renderStatusBadge(a.status)} />
+                          <MobileCardField label="Date" value={new Date(a.created_at).toLocaleDateString()} />
+                        </MobileCard>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>

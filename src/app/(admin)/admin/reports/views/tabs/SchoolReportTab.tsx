@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Building2 } from "lucide-react";
 import { SchoolPerformanceRow, PaginatedResult, GlobalReportFilters } from "../../types";
 import { ExportReportButton } from "../components/ExportReportButton";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 
 interface SchoolReportTabProps {
   report: PaginatedResult<SchoolPerformanceRow>;
@@ -16,7 +17,7 @@ export function SchoolReportTab({ report, filters, onPageChange }: SchoolReportT
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
-      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
+      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div>
           <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
             <Building2 className="h-4 w-4 text-blue-600" />
@@ -28,12 +29,14 @@ export function SchoolReportTab({ report, filters, onPageChange }: SchoolReportT
         </div>
         <ExportReportButton tabName="schools" tabLabel="School Report" filters={filters} />
       </CardHeader>
-      <div className="overflow-x-auto">
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
               <TableHead className="text-xs font-semibold text-slate-700">School Name</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-700">Code</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-700">City</TableHead>
               <TableHead className="text-xs font-semibold text-slate-700 text-center">Total Students</TableHead>
               <TableHead className="text-xs font-semibold text-slate-700 text-center">Orders</TableHead>
               <TableHead className="text-xs font-semibold text-slate-700 text-center">Total Items</TableHead>
@@ -53,12 +56,12 @@ export function SchoolReportTab({ report, filters, onPageChange }: SchoolReportT
               data.map((s) => (
                 <TableRow key={s.schoolId} className="hover:bg-slate-50/80 transition-colors">
                   <TableCell className="font-semibold text-slate-900 text-xs">{s.schoolName}</TableCell>
-                  <TableCell className="text-slate-600 text-xs font-mono">{s.schoolCode}</TableCell>
+                  <TableCell className="text-slate-600 text-xs">{s.city || "—"}</TableCell>
                   <TableCell className="text-center text-slate-800 text-xs font-medium">{s.totalStudents}</TableCell>
                   <TableCell className="text-center text-slate-800 text-xs font-medium">{s.orderCount}</TableCell>
                   <TableCell className="text-center text-slate-800 text-xs font-medium">{s.totalItems}</TableCell>
                   <TableCell className="text-slate-700 text-xs font-medium">{s.currentOrderStage}</TableCell>
-                  <TableCell className="text-center text-emerald-700 text-xs font-semibold">{s.deliveredOrders}</TableCell>
+                  <TableCell className="text-center text-evenvibe-deep text-xs font-semibold">{s.deliveredOrders}</TableCell>
                   <TableCell className="text-center text-amber-700 text-xs font-semibold">{s.pendingOrders}</TableCell>
                 </TableRow>
               ))
@@ -67,13 +70,35 @@ export function SchoolReportTab({ report, filters, onPageChange }: SchoolReportT
         </Table>
       </div>
 
+      {/* Mobile Cards View */}
+      <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+        {data.length === 0 ? (
+          <div className="py-8 text-center text-slate-500 text-sm">
+            No schools found matching the selected filters.
+          </div>
+        ) : (
+          data.map((s) => (
+            <MobileCard key={s.schoolId}>
+              <MobileCardField label="School Name" value={<span className="font-semibold text-slate-900">{s.schoolName}</span>} />
+              <MobileCardField label="City" value={s.city || "—"} />
+              <MobileCardField label="Total Students" value={<span className="font-medium text-slate-800">{s.totalStudents}</span>} />
+              <MobileCardField label="Orders" value={<span className="font-medium text-slate-800">{s.orderCount}</span>} />
+              <MobileCardField label="Total Items" value={<span className="font-medium text-slate-800">{s.totalItems}</span>} />
+              <MobileCardField label="Current Order Stage" value={s.currentOrderStage} />
+              <MobileCardField label="Delivered" value={<span className="text-evenvibe-deep font-semibold">{s.deliveredOrders}</span>} />
+              <MobileCardField label="Pending" value={<span className="text-amber-700 font-semibold">{s.pendingOrders}</span>} />
+            </MobileCard>
+          ))
+        )}
+      </div>
+
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
+        <div className="flex flex-col sm:flex-row gap-2 items-center justify-between px-4 py-3 border-t bg-slate-50/50">
           <p className="text-xs text-muted-foreground">
             Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} schools
           </p>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 w-full sm:w-auto justify-end">
             <Button
               variant="outline"
               size="sm"

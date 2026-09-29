@@ -56,7 +56,7 @@ export function UserMenu({ email, schoolName }: { email: string, schoolName: str
             e.preventDefault();
             handleLogout();
           }}
-          className="text-red-600 focus:text-red-600 font-medium cursor-pointer"
+          className="text-status-error focus:text-status-error font-medium cursor-pointer"
         >
           {isLoggingOut ? (
             <>

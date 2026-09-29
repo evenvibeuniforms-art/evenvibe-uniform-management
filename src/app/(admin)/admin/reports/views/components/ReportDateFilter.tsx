@@ -79,7 +79,7 @@ export function ReportDateFilter({
             className="h-9 w-[135px] text-xs bg-white"
             required
           />
-          <Button type="submit" size="sm" className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white">
+          <Button type="submit" size="sm" className="h-9 px-3 text-xs bg-evenvibe-primary hover:bg-evenvibe-deep text-white">
             Apply
           </Button>
         </form>

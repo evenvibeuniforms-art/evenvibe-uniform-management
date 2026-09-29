@@ -4,9 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/server";
 import { revalidatePath } from "next/cache";
 
-import { sizeCollectionSchema, SizeCollectionFormValues } from "@/app/(school)/school/sizes/schema";
-import { UNIFORM_TYPES } from "@/lib/constants/uniformSizes";
+import { SizeCollectionFormValues, SizeHistoryEntry, LastYearSizesMap } from "@/app/(school)/school/sizes/schema";
 import { STANDARD_CLASSES } from "@/lib/constants/classes";
+import { ActiveStyleItem } from "@/app/(school)/school/sizes/actions";
+import { saveStudentSizesCore } from "@/lib/actions/saveStudentSizesCore";
+import { getActiveAcademicYear, getPreviousAcademicYear, compareAcademicYears } from "@/lib/constants/academicYear";
 
 export type ConfigItem = {
   id: string;
@@ -291,7 +293,10 @@ export async function getAdminStudentDetails(studentId: string) {
         pant_size,
         short_size,
         dynamic_sizes,
-        is_complete
+        dynamic_styles,
+        is_complete,
+        created_at,
+        updated_at
       )
     `)
     .eq("id", studentId)
@@ -305,40 +310,126 @@ export async function getAdminStudentDetails(studentId: string) {
       ? (student.student_uniform_sizes.length > 0 ? student.student_uniform_sizes[0] : null) 
       : (student.student_uniform_sizes || null);
 
-  const { data: configRows } = await supabase
-      .from("school_uniform_configurations")
-      .select(`
-        id,
-        gender,
-        items:school_uniform_configuration_items (
-          id,
-          item_name,
-          available_sizes,
-          is_required,
-          is_active,
-          sort_order
-        ),
-        classes:school_uniform_configuration_classes!inner (
-          class_name
-        )
-      `)
-      .eq("school_id", student.school_id)
-      .eq("gender", student.gender || "Male")
-      .eq("is_active", true)
-      .eq("school_uniform_configuration_classes.class_name", student.class_name || "");
+  const { data: activeStylesData, error: stylesError } = await supabase
+    .from("uniform_styles")
+    .select(`
+      id,
+      style_name,
+      item_name,
+      gender,
+      available_sizes,
+      is_required,
+      sort_order,
+      is_active,
+      classes:uniform_style_classes (
+        class_name
+      ),
+      colors:uniform_style_colors (
+        class_name,
+        color_name,
+        is_active
+      )
+    `)
+    .eq("school_id", student.school_id)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .order("item_name", { ascending: true })
+    .order("style_name", { ascending: true });
 
-  if (configRows && configRows.length > 1) {
-    throw new Error("CONFIGURATION INTEGRITY ERROR: Multiple active configurations found for this class and gender.");
+  if (stylesError) {
+    console.error("Error fetching styles in getAdminStudentDetails:", stylesError);
   }
 
-  const config = (configRows && configRows.length === 1) ? configRows[0] : null;
-  
-  let activeItems: ConfigItem[] = [];
-  if (config && config.items) {
-     activeItems = (config.items as ConfigItem[])
-       .filter(i => i.is_active !== false)
-       .sort((a, b) => a.sort_order - b.sort_order);
+  const rawStyles = activeStylesData || [];
+
+  const activeStyles: ActiveStyleItem[] = rawStyles.map((st) => ({
+    id: st.id,
+    style_name: st.style_name,
+    item_name: st.item_name,
+    gender: st.gender,
+    classes: ((st.classes as { class_name: string }[]) || []).map((c) => c.class_name),
+    available_sizes: st.available_sizes || [],
+    is_required: st.is_required ?? true,
+    sort_order: st.sort_order ?? 0,
+    colors: ((st.colors as { class_name: string; color_name: string; is_active?: boolean }[]) || [])
+      .filter((c) => c.is_active !== false)
+      .map((c) => ({
+        class_name: c.class_name,
+        color_name: c.color_name,
+        is_active: c.is_active,
+      })),
+  }));
+
+  const applicableStyles = activeStyles.filter((st) => {
+    const classMatch = st.classes.includes(student.class_name?.trim() || "");
+    const genderMatch =
+      !st.gender ||
+      st.gender === "All" ||
+      st.gender.toLowerCase() === (student.gender || "Male").toLowerCase();
+    return classMatch && genderMatch;
+  });
+
+  const activeItems: ConfigItem[] = applicableStyles.map((st) => ({
+    id: st.id,
+    item_name: `${st.item_name} (${st.style_name})`,
+    available_sizes: st.available_sizes || [],
+    is_required: st.is_required ?? true,
+    sort_order: st.sort_order ?? 0,
+    is_active: true,
+  }));
+
+  // Centralized academic year resolution
+  const activeAcademicYear = await getActiveAcademicYear(supabase);
+  const previousAcademicYear = getPreviousAcademicYear(activeAcademicYear);
+
+  // Fetch actual historical size records for this student
+  const { data: rawHistory, error: historyError } = await supabase
+    .from("student_uniform_size_history")
+    .select(`
+      id,
+      student_id,
+      school_id,
+      academic_year,
+      style_id,
+      style_name,
+      item_name,
+      gender,
+      size,
+      color,
+      class_name,
+      section,
+      source_type,
+      created_at,
+      updated_at
+    `)
+    .eq("student_id", studentId)
+    .order("academic_year", { ascending: true });
+
+  if (historyError) {
+    console.error("Error fetching size history in getAdminStudentDetails:", historyError);
   }
+
+  const sizeHistory: SizeHistoryEntry[] = (rawHistory || []).sort((a, b) =>
+    compareAcademicYears(a.academic_year, b.academic_year)
+  );
+
+  // Derive Last Year Size map from the previous academic year's actual collected records
+  // Must distinguish exact item + style so different items or styles never mix
+  const lastYearSizes: LastYearSizesMap = {};
+  sizeHistory
+    .filter((h) => h.academic_year === previousAcademicYear)
+    .forEach((h) => {
+      const itemKey = h.item_name ? h.item_name.trim().toLowerCase() : "";
+      if (itemKey && h.style_id) {
+        lastYearSizes[`${itemKey}__${h.style_id}`] = h.size;
+      }
+      if (itemKey && h.style_name) {
+        lastYearSizes[`${itemKey}__${h.style_name.trim().toLowerCase()}`] = h.size;
+      }
+      if (h.style_id) {
+        lastYearSizes[h.style_id] = h.size;
+      }
+    });
 
   return { 
     student: {
@@ -346,7 +437,13 @@ export async function getAdminStudentDetails(studentId: string) {
       school_name: (student.schools as { name?: string } | null)?.name || "Unknown",
     }, 
     sizeRecord, 
-    config: config ? { ...config, items: activeItems } : null 
+    activeStyles,
+    applicableStyles,
+    lastYearSizes,
+    sizeHistory,
+    activeAcademicYear,
+    previousAcademicYear,
+    config: activeItems.length > 0 ? { id: "styles-config", items: activeItems } : null 
   };
 }
 
@@ -355,93 +452,13 @@ export async function saveAdminStudentSizes(data: SizeCollectionFormValues) {
     await requireAdmin();
     const supabase = await createClient();
 
-    const validatedData = sizeCollectionSchema.parse(data);
+    const result = await saveStudentSizesCore({
+      supabase,
+      data,
+    });
 
-    const { data: student, error: studentError } = await supabase
-      .from("students")
-      .select("school_id, gender, class_name")
-      .eq("id", validatedData.student_id)
-      .single();
-
-    if (studentError || !student) {
-      return { error: "Student not found" };
-    }
-
-    const { data: configRows } = await supabase
-      .from("school_uniform_configurations")
-      .select(`
-        id,
-        items:school_uniform_configuration_items (
-          id,
-          item_name,
-          available_sizes,
-          is_required,
-          is_active,
-          sort_order
-        ),
-        classes:school_uniform_configuration_classes!inner (
-          class_name
-        )
-      `)
-      .eq("school_id", student.school_id)
-      .eq("gender", student.gender || "Male")
-      .eq("is_active", true)
-      .eq("school_uniform_configuration_classes.class_name", student.class_name || "");
-
-    if (configRows && configRows.length > 1) {
-      return { error: "CONFIGURATION INTEGRITY ERROR: Multiple active configurations found for this class and gender." };
-    }
-
-    const config = (configRows && configRows.length === 1) ? configRows[0] : null;
-
-    if (!config?.items || config.items.length === 0) {
-      return { error: "No uniform configuration is available for this class." };
-    }
-
-    let is_complete = false;
-    const dynamic_sizes = validatedData.dynamic_sizes || {};
-
-    let allRequiredFilled = true;
-    const activeItems = (config.items as ConfigItem[]).filter(i => i.is_active !== false);
-    
-    for (const item of activeItems) {
-      const itemVal = dynamic_sizes[item.id];
-      
-      if (itemVal && item.available_sizes.length > 0 && !item.available_sizes.includes(itemVal as string)) {
-        return { error: `Invalid size '${itemVal}' for item '${item.item_name}'` };
-      }
-
-      if (item.is_required && !itemVal) {
-        allRequiredFilled = false;
-      }
-    }
-    is_complete = allRequiredFilled;
-
-    const uniform_type = validatedData.uniform_type || UNIFORM_TYPES.REGULAR;
-    const shirt_size = validatedData.shirt_size || null;
-    const tshirt_size = validatedData.tshirt_size || null;
-    const pant_size = validatedData.pant_size || null;
-    const short_size = validatedData.short_size || null;
-
-    const { error: upsertError } = await supabase
-      .from("student_uniform_sizes")
-      .upsert({
-        student_id: validatedData.student_id,
-        school_id: student.school_id, 
-        uniform_type,
-        shirt_size,
-        tshirt_size,
-        pant_size,
-        short_size,
-        dynamic_sizes,
-        is_complete
-      }, {
-        onConflict: "student_id"
-      });
-
-    if (upsertError) {
-      console.error("Error saving size:", upsertError);
-      return { error: "Failed to save student size" };
+    if (result.error) {
+      return { error: result.error };
     }
 
     revalidatePath("/admin/students");

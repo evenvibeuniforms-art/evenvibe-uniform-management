@@ -11,15 +11,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { PackageSearch, Search, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import Link from "next/link";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 const statusColors: Record<string, string> = {
   submitted: "bg-blue-100 text-blue-800",
-  under_review: "bg-purple-100 text-purple-800",
-  confirmed: "bg-indigo-100 text-indigo-800",
+  under_review: "bg-evenvibe-light text-evenvibe-deep",
+  confirmed: "bg-evenvibe-light text-evenvibe-deep",
   production: "bg-amber-100 text-amber-800",
   quality_check: "bg-orange-100 text-orange-800",
   packed: "bg-cyan-100 text-cyan-800",
-  dispatched: "bg-teal-100 text-teal-800",
+  dispatched: "bg-evenvibe-light text-evenvibe-deep",
   in_transit: "bg-emerald-100 text-emerald-800",
   delivered: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
@@ -172,58 +173,96 @@ export function SchoolOrdersListView({
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent bg-slate-50/50">
-                    <TableHead className="w-[200px]">Order Number</TableHead>
-                    <TableHead>Order Date</TableHead>
-                    <TableHead className="text-center">Total Students</TableHead>
-                    <TableHead className="text-center">Total Items</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Last Updated</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => {
-                    const totalItems = order.requirement.requirement_items.reduce((sum, item) => sum + item.quantity, 0);
-                    return (
-                      <TableRow key={order.id}>
-                        <TableCell className="font-medium text-slate-900">{order.order_number}</TableCell>
-                        <TableCell className="text-slate-500">
-                          {new Date(order.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        </TableCell>
-                        <TableCell className="text-center text-slate-700">{order.requirement.total_students}</TableCell>
-                        <TableCell className="text-center text-slate-700">{totalItems}</TableCell>
-                        <TableCell>
-                          <Badge className={`${statusColors[order.status] || "bg-slate-100 text-slate-800"} hover:opacity-80 border-0`}>
-                            {statusLabels[order.status] || order.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-slate-500">
-                          {new Date(order.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Link href={`/school/orders/${order.id}`}>
-                            <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </Button>
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent bg-slate-50/50">
+                      <TableHead className="w-[200px]">Order Number</TableHead>
+                      <TableHead>Order Date</TableHead>
+                      <TableHead className="text-center">Total Students</TableHead>
+                      <TableHead className="text-center">Total Items</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Updated</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => {
+                      const totalItems = order.requirement.requirement_items.reduce((sum, item) => sum + item.quantity, 0);
+                      return (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-medium text-slate-900">{order.order_number}</TableCell>
+                          <TableCell className="text-slate-500">
+                            {new Date(order.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </TableCell>
+                          <TableCell className="text-center text-slate-700">{order.requirement.total_students}</TableCell>
+                          <TableCell className="text-center text-slate-700">{totalItems}</TableCell>
+                          <TableCell>
+                            <Badge className={`${statusColors[order.status] || "bg-slate-100 text-slate-800"} hover:opacity-80 border-0`}>
+                              {statusLabels[order.status] || order.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-500">
+                            {new Date(order.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link href={`/school/orders/${order.id}`}>
+                              <Button variant="ghost" size="sm" className="text-evenvibe-primary hover:text-emerald-700 hover:bg-emerald-50">
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 p-3">
+                {orders.map((order) => {
+                  const totalItems = order.requirement.requirement_items.reduce((sum, item) => sum + item.quantity, 0);
+                  return (
+                    <MobileCard key={order.id}>
+                      <MobileCardField label="Order Number" value={order.order_number} />
+                      <MobileCardField 
+                        label="Order Date" 
+                        value={new Date(order.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} 
+                      />
+                      <MobileCardField label="Total Students" value={order.requirement.total_students} />
+                      <MobileCardField label="Total Items" value={totalItems} />
+                      <MobileCardField label="Status">
+                        <Badge className={`${statusColors[order.status] || "bg-slate-100 text-slate-800"} hover:opacity-80 border-0`}>
+                          {statusLabels[order.status] || order.status}
+                        </Badge>
+                      </MobileCardField>
+                      <MobileCardField 
+                        label="Last Updated" 
+                        value={new Date(order.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} 
+                      />
+                      <MobileCardActions label="Action">
+                        <Link href={`/school/orders/${order.id}`}>
+                          <Button variant="outline" size="sm" className="text-evenvibe-primary hover:text-emerald-700 hover:bg-emerald-50 h-8 text-xs">
+                            <Eye className="h-3.5 w-3.5 mr-1.5" />
+                            View Details
+                          </Button>
+                        </Link>
+                      </MobileCardActions>
+                    </MobileCard>
+                  );
+                })}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
 
       {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
           <p className="text-sm text-slate-500">
             Showing {(pagination.page - 1) * pagination.limit + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} orders
           </p>

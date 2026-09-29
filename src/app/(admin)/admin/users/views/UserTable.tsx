@@ -24,6 +24,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { UserManagementRow, UserFilters } from "../types";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 interface UserTableProps {
   users: UserManagementRow[];
@@ -100,7 +101,8 @@ export function UserTable({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow className="border-b">
@@ -177,7 +179,7 @@ export function UserTable({
                         <div className="flex flex-col">
                           <span>{user.fullName}</span>
                           {isSelf && (
-                            <span className="text-[10px] text-purple-600 font-semibold uppercase tracking-wider">
+                            <span className="text-[10px] text-evenvibe-primary font-semibold uppercase tracking-wider">
                               (You)
                             </span>
                           )}
@@ -191,7 +193,7 @@ export function UserTable({
                           variant="outline"
                           className={
                             isEvenViveAdmin
-                              ? "bg-purple-50 text-purple-700 border-purple-200 font-medium"
+                              ? "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light font-medium"
                               : "bg-blue-50 text-blue-700 border-blue-200 font-medium"
                           }
                         >
@@ -216,7 +218,7 @@ export function UserTable({
                             )}
                           </div>
                         ) : (
-                          <span className="text-xs text-amber-600 font-medium">
+                          <span className="text-xs text-status-warning font-medium">
                             No School Assigned
                           </span>
                         )}
@@ -269,7 +271,7 @@ export function UserTable({
                               variant="outline"
                               size="sm"
                               onClick={() => onUpdateStatus(user, "deactivate")}
-                              className="h-8 px-2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                              className="h-8 px-2 text-status-error border-red-200 hover:bg-red-50 hover:text-red-700"
                               title="Deactivate School Admin"
                             >
                               <UserX className="h-3.5 w-3.5 mr-1" />
@@ -280,7 +282,7 @@ export function UserTable({
                               variant="outline"
                               size="sm"
                               onClick={() => onUpdateStatus(user, "activate")}
-                              className="h-8 px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+                              className="h-8 px-2 text-evenvibe-deep border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
                               title="Activate School Admin"
                             >
                               <UserCheck className="h-3.5 w-3.5 mr-1" />
@@ -295,6 +297,130 @@ export function UserTable({
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+          {users.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-sm">
+              <ShieldAlert className="h-6 w-6 text-slate-400 mx-auto mb-1" />
+              {filters.search || filters.role !== "all" || filters.schoolId !== "all" || filters.status !== "all"
+                ? "No users match your filters."
+                : "No users found."}
+            </div>
+          ) : (
+            users.map((user) => {
+              const isEvenViveAdmin = user.role === "evenvibe_admin";
+              const isSelf = currentUserId === user.id;
+
+              return (
+                <MobileCard key={user.id}>
+                  <MobileCardField
+                    label="Name"
+                    value={
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-slate-900">{user.fullName}</span>
+                        {isSelf && (
+                          <span className="text-[10px] text-evenvibe-primary font-semibold uppercase tracking-wider">
+                            (You)
+                          </span>
+                        )}
+                      </div>
+                    }
+                  />
+                  <MobileCardField label="Email" value={user.email} />
+                  <MobileCardField
+                    label="Role"
+                    value={
+                      <Badge
+                        variant="outline"
+                        className={
+                          isEvenViveAdmin
+                            ? "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light font-medium"
+                            : "bg-blue-50 text-blue-700 border-blue-200 font-medium"
+                        }
+                      >
+                        {isEvenViveAdmin ? "EvenVive Admin" : "School Admin"}
+                      </Badge>
+                    }
+                  />
+                  <MobileCardField
+                    label="School"
+                    value={
+                      isEvenViveAdmin ? (
+                        <span className="text-xs font-medium text-slate-500 italic">EvenVive Admin</span>
+                      ) : user.schoolName ? (
+                        <div>
+                          <span className="font-medium text-slate-800 text-sm">{user.schoolName}</span>
+                          {user.schoolCode && (
+                            <span className="ml-1.5 font-mono text-xs text-slate-400">({user.schoolCode})</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-status-warning font-medium">No School Assigned</span>
+                      )
+                    }
+                  />
+                  <MobileCardField label="Phone" value={user.phone || "—"} />
+                  <MobileCardField
+                    label="Status"
+                    value={
+                      <Badge
+                        variant={user.isActive ? "default" : "secondary"}
+                        className={
+                          user.isActive
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200 font-medium"
+                            : "bg-slate-100 text-slate-600 border-slate-200 font-medium"
+                        }
+                      >
+                        {user.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    }
+                  />
+                  <MobileCardField label="Created" value={formatDate(user.createdAt)} />
+                  <MobileCardActions label="Actions">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onViewDetails(user)}
+                        className="w-full text-slate-700 border-slate-200 hover:bg-slate-100 h-8 gap-1.5 justify-center"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Details
+                      </Button>
+
+                      {isEvenViveAdmin ? (
+                        <div className="flex items-center justify-center text-xs text-slate-400 italic px-2 py-1 select-none">
+                          Protected Account
+                        </div>
+                      ) : user.isActive ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onUpdateStatus(user, "deactivate")}
+                          className="w-full text-status-error border-red-200 hover:bg-red-50 h-8 gap-1.5 justify-center"
+                        >
+                          <UserX className="h-3.5 w-3.5" />
+                          Deactivate
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onUpdateStatus(user, "activate")}
+                          className="w-full text-evenvibe-deep border-emerald-200 hover:bg-emerald-50 h-8 gap-1.5 justify-center"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Activate
+                        </Button>
+                      )}
+                    </div>
+                  </MobileCardActions>
+                </MobileCard>
+              );
+            })
+          )}
         </div>
 
         {/* Server-side Pagination Footer */}

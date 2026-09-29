@@ -48,14 +48,20 @@ export function TcStudentDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
-          {/* TC Number Highlight */}
+          {/* TC Date Highlight */}
           <div className="p-4 bg-slate-900 text-white rounded-xl flex items-center justify-between">
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                Transfer Certificate Number
+                Transfer Certificate Date
               </p>
               <p className="text-xl font-bold text-white tracking-wide mt-0.5">
-                {tcStudent.tc_number}
+                {tcStudent.tc_date
+                  ? new Date(tcStudent.tc_date + "T00:00:00").toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "Not Recorded"}
               </p>
             </div>
             <div className="text-right">

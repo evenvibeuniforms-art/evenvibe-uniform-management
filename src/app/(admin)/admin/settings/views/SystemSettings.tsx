@@ -51,7 +51,7 @@ export function SystemSettings({ initialData }: SystemSettingsProps) {
       description="Configure administrative table pagination, date formatting, and regional localization."
       action={
         isDirty && (
-          <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+          <span className="text-[11px] font-semibold text-status-warning bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
             Unsaved Changes
           </span>
         )
@@ -121,7 +121,7 @@ export function SystemSettings({ initialData }: SystemSettingsProps) {
         <div className="rounded-lg border bg-slate-50 p-3 space-y-1.5 pt-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-emerald-600" />
+              <Globe className="h-4 w-4 text-evenvibe-primary" />
               <span className="text-xs font-semibold text-slate-800">
                 Application Timezone
               </span>
@@ -158,7 +158,7 @@ export function SystemSettings({ initialData }: SystemSettingsProps) {
           <Button
             type="submit"
             disabled={loading || !isDirty}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
           >
             {loading ? (
               <>

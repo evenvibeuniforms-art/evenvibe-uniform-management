@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Factory } from "lucide-react";
 import { ProductionReportRow, PaginatedResult, GlobalReportFilters } from "../../types";
 import { ExportReportButton } from "../components/ExportReportButton";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 
 interface ProductionReportTabProps {
   report: PaginatedResult<ProductionReportRow>;
@@ -27,9 +28,9 @@ const getStageBadge = (stage: string) => {
     case "production_started":
       return "bg-blue-100 text-blue-800 border-blue-200";
     case "cutting":
-      return "bg-indigo-100 text-indigo-800 border-indigo-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "stitching":
-      return "bg-purple-100 text-purple-800 border-purple-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "finishing":
       return "bg-pink-100 text-pink-800 border-pink-200";
     case "production_completed":
@@ -44,10 +45,10 @@ export function ProductionReportTab({ report, filters, onPageChange }: Productio
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
-      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
+      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-            <Factory className="h-4 w-4 text-indigo-600" />
+            <Factory className="h-4 w-4 text-evenvibe-primary" />
             Manufacturing & Production Report ({totalCount})
           </CardTitle>
           <CardDescription className="text-xs mt-0.5">
@@ -56,7 +57,9 @@ export function ProductionReportTab({ report, filters, onPageChange }: Productio
         </div>
         <ExportReportButton tabName="production" tabLabel="Production Report" filters={filters} />
       </CardHeader>
-      <div className="overflow-x-auto">
+
+      {/* Desktop Table View (>= 768px) */}
+      <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
@@ -86,7 +89,7 @@ export function ProductionReportTab({ report, filters, onPageChange }: Productio
                     {p.schoolName}
                   </TableCell>
                   <TableCell className="text-center text-slate-900 text-xs font-semibold">{p.totalQuantity}</TableCell>
-                  <TableCell className="text-center text-emerald-700 text-xs font-bold">{p.completedQuantity}</TableCell>
+                  <TableCell className="text-center text-evenvibe-deep text-xs font-bold">{p.completedQuantity}</TableCell>
                   <TableCell className="text-center text-amber-700 text-xs font-bold">{p.pendingQuantity}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${getStageBadge(p.stage)}`}>
@@ -105,10 +108,40 @@ export function ProductionReportTab({ report, filters, onPageChange }: Productio
         </Table>
       </div>
 
+      {/* Mobile Card View (< 768px) */}
+      <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+        {data.length === 0 ? (
+          <div className="text-center py-8 text-xs text-slate-500 bg-white rounded-lg border border-slate-200">
+            No production records found matching the selected filters.
+          </div>
+        ) : (
+          data.map((p) => (
+            <MobileCard key={p.orderId}>
+              <MobileCardField label="Order Number" value={<span className="font-mono font-semibold">{p.orderNumber}</span>} />
+              <MobileCardField label="School" value={p.schoolName} />
+              <MobileCardField label="Total Qty" value={p.totalQuantity} />
+              <MobileCardField label="Completed Qty" value={<span className="text-evenvibe-deep font-bold">{p.completedQuantity}</span>} />
+              <MobileCardField label="Pending Qty" value={<span className="text-amber-700 font-bold">{p.pendingQuantity}</span>} />
+              <MobileCardField
+                label="Stage"
+                value={
+                  <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${getStageBadge(p.stage)}`}>
+                    {p.stage.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </Badge>
+                }
+              />
+              <MobileCardField label="Started Date" value={formatDate(p.startedAt)} />
+              <MobileCardField label="Completed Date" value={formatDate(p.completedAt)} />
+              <MobileCardField label="Remarks" value={p.remarks || "—"} />
+            </MobileCard>
+          ))
+        )}
+      </div>
+
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
-          <p className="text-xs text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3 border-t bg-slate-50/50">
+          <p className="text-xs text-muted-foreground text-center sm:text-left">
             Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} records
           </p>
           <div className="flex items-center gap-1">

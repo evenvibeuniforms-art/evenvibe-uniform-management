@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { NotificationRow, NotificationFilters } from "../types";
 import { StatusActionType } from "./NotificationStatusDialog";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 interface NotificationTableProps {
   notifications: NotificationRow[];
@@ -118,7 +119,7 @@ export function NotificationTable({
       case "published":
         return (
           <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-            <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" /> Published
+            <CheckCircle2 className="h-3 w-3 mr-1 text-evenvibe-primary" /> Published
           </Badge>
         );
       case "scheduled":
@@ -142,7 +143,7 @@ export function NotificationTable({
       case "cancelled":
         return (
           <Badge variant="outline" className="bg-rose-100 text-rose-700 border-rose-200">
-            <Ban className="h-3 w-3 mr-1 text-rose-500" /> Cancelled
+            <Ban className="h-3 w-3 mr-1 text-status-error" /> Cancelled
           </Badge>
         );
     }
@@ -168,13 +169,14 @@ export function NotificationTable({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow className="border-b">
                 <TableHead
                   onClick={() => handleSort("title")}
-                  className="cursor-pointer font-semibold text-slate-900 hover:text-slate-700 min-w-[220px]"
+                  className="cursor-pointer font-semibold text-slate-900 hover:text-slate-700"
                 >
                   <div className="flex items-center">
                     Title {renderSortIcon("title")}
@@ -298,7 +300,7 @@ export function NotificationTable({
                               {/* Publish Now option */}
                               {(notif.status === "draft" || notif.status === "scheduled") && (
                                 <DropdownMenuItem onClick={() => onAction(notif, "publish")}>
-                                  <Send className="mr-2 h-3.5 w-3.5 text-emerald-600" />
+                                  <Send className="mr-2 h-3.5 w-3.5 text-evenvibe-primary" />
                                   Publish Now
                                 </DropdownMenuItem>
                               )}
@@ -306,7 +308,7 @@ export function NotificationTable({
                               {/* Cancel Scheduled option */}
                               {notif.status === "scheduled" && (
                                 <DropdownMenuItem onClick={() => onAction(notif, "cancel_scheduled")}>
-                                  <Ban className="mr-2 h-3.5 w-3.5 text-rose-600" />
+                                  <Ban className="mr-2 h-3.5 w-3.5 text-status-error" />
                                   Cancel Schedule
                                 </DropdownMenuItem>
                               )}
@@ -319,19 +321,15 @@ export function NotificationTable({
                                 </DropdownMenuItem>
                               )}
 
-                              {/* Delete option for draft */}
-                              {notif.status === "draft" && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={() => onAction(notif, "delete_draft")}
-                                    className="text-red-600 focus:text-red-600"
-                                  >
-                                    <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                    Delete Draft
-                                  </DropdownMenuItem>
-                                </>
-                              )}
+                              {/* Delete option */}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => onAction(notif, "delete_draft")}
+                                className="text-status-error hover:text-rose-700"
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                Delete
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -342,6 +340,103 @@ export function NotificationTable({
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+          {notifications.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-sm">
+              <BellOff className="h-6 w-6 text-slate-400 mx-auto mb-1" />
+              {filters.search || filters.status !== "all" || filters.type !== "all" || filters.targetType !== "all" || filters.datePreset !== "all"
+                ? "No notifications match your filters."
+                : "No notifications found."}
+            </div>
+          ) : (
+            notifications.map((notif) => (
+              <MobileCard key={notif.id}>
+                <MobileCardField
+                  label="Title"
+                  value={
+                    <div>
+                      <p className="font-semibold text-slate-900">{notif.title}</p>
+                      {notif.message && <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">{notif.message}</p>}
+                    </div>
+                  }
+                />
+                <MobileCardField label="Type" value={getTypeBadge(notif.notificationType)} />
+                <MobileCardField
+                  label="Audience"
+                  value={
+                    notif.targetType === "all_schools" ? (
+                      <span className="text-xs font-semibold text-slate-700">All Schools</span>
+                    ) : (
+                      <span className="text-xs font-medium text-blue-700">
+                        {notif.targetSchoolCount} {notif.targetSchoolCount === 1 ? "School" : "Schools"}
+                      </span>
+                    )
+                  }
+                />
+                <MobileCardField label="Status" value={getStatusBadge(notif.status)} />
+                <MobileCardField label="Created" value={formatDate(notif.createdAt)} />
+                {notif.scheduledAt && <MobileCardField label="Scheduled" value={formatDate(notif.scheduledAt)} />}
+                {notif.publishedAt && <MobileCardField label="Published" value={formatDate(notif.publishedAt)} />}
+                <MobileCardActions label="Actions">
+                  <div className="flex items-center gap-2 w-full">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onViewDetails(notif)}
+                      className="flex-1 text-slate-700 border-slate-200 hover:bg-slate-50 h-8 gap-1.5 justify-center"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Details
+                    </Button>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md h-8 px-3 border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors text-xs font-medium">
+                        <MoreHorizontal className="h-4 w-4 mr-1" />
+                        More
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48 text-xs">
+                        {(notif.status === "draft" || notif.status === "scheduled") && (
+                          <DropdownMenuItem onClick={() => onEdit(notif)}>
+                            <Edit2 className="mr-2 h-3.5 w-3.5" />
+                            Edit Notification
+                          </DropdownMenuItem>
+                        )}
+                        {(notif.status === "draft" || notif.status === "scheduled") && (
+                          <DropdownMenuItem onClick={() => onAction(notif, "publish")}>
+                            <Send className="mr-2 h-3.5 w-3.5 text-evenvibe-primary" />
+                            Publish Now
+                          </DropdownMenuItem>
+                        )}
+                        {notif.status === "scheduled" && (
+                          <DropdownMenuItem onClick={() => onAction(notif, "cancel_scheduled")}>
+                            <Ban className="mr-2 h-3.5 w-3.5 text-status-error" />
+                            Cancel Schedule
+                          </DropdownMenuItem>
+                        )}
+                        {notif.status === "published" && (
+                          <DropdownMenuItem onClick={() => onAction(notif, "archive")}>
+                            <Archive className="mr-2 h-3.5 w-3.5 text-zinc-600" />
+                            Archive
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => onAction(notif, "delete_draft")}
+                          className="text-status-error hover:text-rose-700"
+                        >
+                          <Trash2 className="mr-2 h-3.5 w-3.5" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
         </div>
 
         {/* Server-side Pagination Footer */}

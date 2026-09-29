@@ -9,6 +9,12 @@ export const sizeCollectionSchema = z.object({
   pant_size: z.string().nullable().optional(),
   short_size: z.string().nullable().optional(),
   dynamic_sizes: z.record(z.string(), z.string()).optional(),
+  dynamic_styles: z.record(z.string(), z.object({
+    style_id: z.string(),
+    style_name: z.string(),
+    color: z.string().nullable().optional(),
+  })).optional(),
+  manual_last_year_sizes: z.record(z.string(), z.string()).optional(),
   is_dynamic_only: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.is_dynamic_only) return; // Skip legacy validation
@@ -44,16 +50,45 @@ export const sizeCollectionSchema = z.object({
 
 export type SizeCollectionFormValues = z.infer<typeof sizeCollectionSchema>;
 
+export type DynamicStyleEntry = {
+  style_id: string;
+  style_name: string;
+  color?: string | null;
+};
+
+export type SizeHistoryEntry = {
+  id: string;
+  student_id: string;
+  school_id?: string;
+  academic_year: string;
+  style_id: string | null;
+  style_name: string | null;
+  item_name: string;
+  gender: string | null;
+  size: string;
+  color: string | null;
+  class_name: string | null;
+  section: string | null;
+  source_type?: "historical_record" | "manual_baseline";
+  created_at: string;
+  updated_at: string;
+};
+
+export type LastYearSizesMap = Record<string, string>;
+export type ManualLastYearSizesMap = Record<string, string>;
+
 export type StudentSizeRecord = {
   id: string;
   student_id: string;
   school_id: string;
+  academic_year?: string;
   uniform_type: "regular" | "tshirt";
   shirt_size: string | null;
   tshirt_size: string | null;
   pant_size: string | null;
   short_size: string | null;
   dynamic_sizes: Record<string, string>;
+  dynamic_styles?: Record<string, DynamicStyleEntry>;
   is_complete: boolean;
   created_at: string;
   updated_at: string;
@@ -67,4 +102,6 @@ export type StudentWithSize = {
   admission_number: string;
   gender: string | null;
   size_record: StudentSizeRecord | null;
+  last_year_sizes?: LastYearSizesMap;
+  size_history?: SizeHistoryEntry[];
 };

@@ -15,7 +15,7 @@ export default function PackingDeliveryOverview({ data }: PackingDeliveryOvervie
         <CardHeader className="pb-3 flex flex-row items-center justify-between border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
-              <PackageCheck className="w-5 h-5 text-teal-600" />
+              <PackageCheck className="w-5 h-5 text-evenvibe-primary" />
               <CardTitle className="text-base font-semibold text-slate-900">
                 Packing & Delivery
               </CardTitle>
@@ -26,7 +26,7 @@ export default function PackingDeliveryOverview({ data }: PackingDeliveryOvervie
           </div>
           <Link
             href="/admin/packing-delivery"
-            className="text-xs font-medium text-teal-600 hover:text-teal-700 flex items-center gap-0.5 hover:underline"
+            className="text-xs font-medium text-evenvibe-primary hover:text-evenvibe-deep flex items-center gap-0.5 hover:underline"
           >
             Details
             <ArrowRight className="w-3 h-3" />
@@ -45,9 +45,9 @@ export default function PackingDeliveryOverview({ data }: PackingDeliveryOvervie
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-teal-50/50 border border-teal-200/60">
-              <div className="flex items-center gap-2 text-xs font-medium text-teal-800">
-                <Clock className="w-3.5 h-3.5 text-teal-600" />
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-evenvibe-light/50 border border-evenvibe-light/60">
+              <div className="flex items-center gap-2 text-xs font-medium text-evenvibe-deep">
+                <Clock className="w-3.5 h-3.5 text-evenvibe-primary" />
                 Packing In Progress
               </div>
               <span className="text-sm font-bold text-slate-900">
@@ -57,7 +57,7 @@ export default function PackingDeliveryOverview({ data }: PackingDeliveryOvervie
 
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-cyan-50/50 border border-cyan-200/60">
               <div className="flex items-center gap-2 text-xs font-medium text-cyan-800">
-                <PackageCheck className="w-3.5 h-3.5 text-cyan-600" />
+                <PackageCheck className="w-3.5 h-3.5 text-status-info" />
                 Ready for Dispatch (Packed)
               </div>
               <span className="text-sm font-bold text-slate-900">
@@ -67,7 +67,7 @@ export default function PackingDeliveryOverview({ data }: PackingDeliveryOvervie
 
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-orange-50/50 border border-orange-200/60">
               <div className="flex items-center gap-2 text-xs font-medium text-orange-800">
-                <Truck className="w-3.5 h-3.5 text-orange-600" />
+                <Truck className="w-3.5 h-3.5 text-status-warning" />
                 In Transit (Dispatched)
               </div>
               <span className="text-sm font-bold text-slate-900">
@@ -77,7 +77,7 @@ export default function PackingDeliveryOverview({ data }: PackingDeliveryOvervie
 
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-50/50 border border-emerald-200/60">
               <div className="flex items-center gap-2 text-xs font-medium text-emerald-800">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-evenvibe-primary" />
                 Delivered
               </div>
               <span className="text-sm font-bold text-slate-900">
@@ -92,7 +92,7 @@ export default function PackingDeliveryOverview({ data }: PackingDeliveryOvervie
         <span className="text-slate-500">Logistics status</span>
         <Link
           href="/admin/packing-delivery"
-          className="text-teal-700 font-medium hover:underline inline-flex items-center gap-1"
+          className="text-evenvibe-deep font-medium hover:underline inline-flex items-center gap-1"
         >
           Open Logistics
           <ArrowRight className="w-3 h-3" />

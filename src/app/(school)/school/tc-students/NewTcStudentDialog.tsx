@@ -30,8 +30,8 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<EligibleStudent | null>(null);
 
-  // TC Number state
-  const [tcNumber, setTcNumber] = useState("");
+  // TC Date state (defaults to today)
+  const [tcDate, setTcDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   // Feedback states
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
   const handleOpenDialog = () => {
     setSelectedStudent(null);
     setStudentSearch("");
-    setTcNumber("");
+    setTcDate(new Date().toISOString().split("T")[0]);
     setErrorMsg(null);
     setSuccessMsg(null);
     setOpen(true);
@@ -67,7 +67,7 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
     if (!newOpen) {
       setSelectedStudent(null);
       setStudentSearch("");
-      setTcNumber("");
+      setTcDate(new Date().toISOString().split("T")[0]);
       setErrorMsg(null);
       setSuccessMsg(null);
     }
@@ -93,7 +93,7 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
 
   const handleDeselectStudent = () => {
     setSelectedStudent(null);
-    setTcNumber("");
+    setTcDate(new Date().toISOString().split("T")[0]);
     setErrorMsg(null);
   };
 
@@ -107,16 +107,16 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
       return;
     }
 
-    const trimmedTc = tcNumber.trim();
-    if (!trimmedTc) {
-      setErrorMsg("TC Number is required.");
+    const trimmedDate = tcDate.trim();
+    if (!trimmedDate) {
+      setErrorMsg("TC Date is required.");
       return;
     }
 
     startTransition(async () => {
       const res = await createTcStudent({
         student_id: selectedStudent.id,
-        tc_number: trimmedTc,
+        tc_date: trimmedDate,
       });
 
       if (!res.success) {
@@ -157,14 +157,14 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
 
         {errorMsg && (
           <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-            <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-status-error shrink-0 mt-0.5" />
             <div className="flex-1">{errorMsg}</div>
           </div>
         )}
 
         {successMsg && (
-          <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+          <div className="flex items-center gap-2.5 p-3.5 bg-evenvibe-light border border-emerald-200 text-evenvibe-deep rounded-lg text-sm">
+            <CheckCircle2 className="h-5 w-5 text-status-success shrink-0" />
             <div className="flex-1 font-medium">{successMsg}</div>
           </div>
         )}
@@ -244,7 +244,7 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
                   variant="ghost"
                   size="sm"
                   onClick={handleDeselectStudent}
-                  className="h-8 text-xs text-slate-600 hover:text-red-600 hover:bg-red-50 flex items-center gap-1"
+                  className="h-8 text-xs text-slate-600 hover:text-status-error hover:bg-red-50 flex items-center gap-1"
                 >
                   <X className="h-3.5 w-3.5" />
                   Change
@@ -314,25 +314,25 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
                 </div>
               </div>
 
-              {/* FIELD 6: TC Number (MANUALLY ENTERED) */}
+              {/* FIELD 6: TC Date (MANDATORY) */}
               <div className="space-y-1.5 pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="tc_number" className="text-sm font-semibold text-slate-900">
-                    TC Number *
+                  <Label htmlFor="tc_date" className="text-sm font-semibold text-slate-900">
+                    TC Date *
                   </Label>
-                  <span className="text-xs text-slate-400">Required</span>
+                  <span className="text-xs text-status-error font-medium">Required</span>
                 </div>
                 <Input
-                  id="tc_number"
-                  placeholder="e.g. TC/2026/001"
-                  value={tcNumber}
-                  onChange={(e) => setTcNumber(e.target.value)}
+                  id="tc_date"
+                  type="date"
+                  value={tcDate}
+                  onChange={(e) => setTcDate(e.target.value)}
                   className="bg-white"
                   autoFocus
                   required
                 />
                 <p className="text-xs text-slate-500">
-                  Must be unique within your school.
+                  Date of Transfer Certificate issuance.
                 </p>
               </div>
             </div>
@@ -349,7 +349,7 @@ export function NewTcStudentDialog({ onSuccess }: NewTcStudentDialogProps) {
             </Button>
             <Button
               type="submit"
-              disabled={isPending || !selectedStudent || !tcNumber.trim()}
+              disabled={isPending || !selectedStudent || !tcDate.trim()}
               className="bg-slate-900 hover:bg-slate-800 text-white font-medium"
             >
               {isPending ? (

@@ -1,11 +1,13 @@
 import { requireAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import AdminPackingDeliveryDetailsView from "../views/AdminPackingDeliveryDetailsView";
-
+import AdminPackingDeliveryDetailsView, {
+  DeliveryItemRow,
+} from "../views/AdminPackingDeliveryDetailsView";
+import { DeliveryProofImage } from "@/types/database";
 
 export const metadata = {
-  title: "Packing & Delivery Workspace | EvenVibe Admin",
+  title: "Delivery | EvenVibe Admin",
 };
 
 export default async function AdminPackingDeliveryDetailsPage({
@@ -29,18 +31,13 @@ export default async function AdminPackingDeliveryDetailsPage({
       estimated_delivery,
       shipped_at,
       delivered_at,
+      delivery_remarks,
       created_at,
       updated_at,
-      requirement_id,
       school_id,
       schools (
         id,
         name
-      ),
-      requirements (
-        id,
-        requirement_number,
-        total_students
       )
     `)
     .eq("id", id)
@@ -50,43 +47,26 @@ export default async function AdminPackingDeliveryDetailsPage({
     notFound();
   }
 
-  // Only allow orders that have reached packed or beyond
-  const validDeliveryLifecycles = [
-    "packed",
-    "dispatched",
-    "in_transit",
-    "delivered",
-  ];
-  if (!validDeliveryLifecycles.includes(order.status)) {
-    notFound();
-  }
-
-  // 2. Concurrently fetch Requirement Items, Students, QC Record, Packing Record, and Packing History
+  // 2. Concurrently fetch QC Record, QC Items, Delivery/Packing Record, and History
   const [
-    { data: requirementItems },
-    { data: reqStudents },
     { data: qcRecord },
+    { data: qcItems },
     { data: packingRecord },
     { data: packingHistoryRaw },
+    { data: orderStatusHistory },
+    { data: proofImagesRaw },
   ] = await Promise.all([
     supabase
-      .from("requirement_items")
-      .select("*")
-      .eq("requirement_id", order.requirement_id)
-      .order("class_name", { nullsFirst: true })
-      .order("section_name", { nullsFirst: true })
-      .order("gender", { nullsFirst: true })
-      .order("item_name")
-      .order("size"),
-    supabase
-      .from("requirement_students")
-      .select("student_id")
-      .eq("requirement_id", order.requirement_id),
-    supabase
       .from("quality_check_records")
-      .select("id, status, completed_at")
+      .select("id, status, total_quantity, checked_quantity, passed_quantity, defective_quantity, completed_at, remarks")
       .eq("order_id", id)
       .maybeSingle(),
+    supabase
+      .from("order_quality_check_items")
+      .select("id, item_name, style_id, style_name, color, size, packed_quantity, passed_quantity, defective_quantity, status")
+      .eq("order_id", id)
+      .order("item_name")
+      .order("size"),
     supabase
       .from("packing_records")
       .select("*")
@@ -96,8 +76,6 @@ export default async function AdminPackingDeliveryDetailsPage({
       .from("packing_history")
       .select(`
         id,
-        packing_record_id,
-        order_id,
         from_status,
         to_status,
         note,
@@ -111,147 +89,63 @@ export default async function AdminPackingDeliveryDetailsPage({
       `)
       .eq("order_id", id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("order_status_history")
+      .select("*")
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("delivery_proof_images")
+      .select(`
+        id,
+        order_id,
+        storage_path,
+        file_name,
+        mime_type,
+        file_size,
+        caption,
+        uploaded_by,
+        created_at,
+        display_order,
+        profiles:uploaded_by (
+          id,
+          full_name,
+          role
+        )
+      `)
+      .eq("order_id", id)
+      .order("created_at", { ascending: true }),
   ]);
 
-  const studentIds = (reqStudents || []).map((rs) => rs.student_id);
-  const distinctTrackedStudents = new Set(studentIds).size;
-  const requirementRecord = Array.isArray(order.requirements)
-    ? order.requirements[0]
-    : order.requirements;
-  const totalStudents =
-    distinctTrackedStudents > 0
-      ? distinctTrackedStudents
-      : (requirementRecord?.total_students || 0);
+  // Section 6, 8, 9: Delivery Quantity Source & Zero Quantity Rule
+  // Deliverable quantities come strictly from QC Passed Quantity
+  // Rows with passed_quantity = 0 or null are strictly excluded from operational delivery rows
+  const isDelivered = order.status === "delivered";
+  const isDispatched = order.status === "dispatched" || order.status === "in_transit";
+  const isDeliveryInProgress =
+    packingRecord?.status === "in_progress" || packingRecord?.status === "completed";
 
-  // Map student counts per dynamic item_name
-  const itemStudentSets = new Map<string, Set<string>>();
+  const rowStatus: "ready" | "in_progress" | "dispatched" | "delivered" = isDelivered
+    ? "delivered"
+    : isDispatched
+    ? "dispatched"
+    : isDeliveryInProgress
+    ? "in_progress"
+    : "ready";
 
-  if (studentIds.length > 0) {
-    // Fetch in batches of 200 in parallel
-    const chunkSize = 200;
-    const chunks: string[][] = [];
-    for (let i = 0; i < studentIds.length; i += chunkSize) {
-      chunks.push(studentIds.slice(i, i + chunkSize));
-    }
+  const deliveryItems: DeliveryItemRow[] = (qcItems || [])
+    .filter((item) => (item.passed_quantity || 0) > 0)
+    .map((item) => ({
+      id: item.id,
+      styleName: item.style_name?.trim() || "Standard",
+      itemName: item.item_name,
+      color: item.color?.trim() || "Default",
+      size: item.size,
+      quantity: item.passed_quantity || 0,
+      status: rowStatus,
+    }));
 
-    const [chunkResults, { data: configItems }] = await Promise.all([
-      Promise.all(chunks.map(chunk =>
-        supabase
-          .from("student_uniform_sizes")
-          .select("student_id, dynamic_sizes, shirt_size, pant_size, tshirt_size, short_size")
-          .in("student_id", chunk)
-      )),
-      supabase
-        .from("school_uniform_configuration_items")
-        .select("id, item_name"),
-    ]);
-
-    const allSizes: {
-      student_id: string;
-      dynamic_sizes: unknown;
-      shirt_size: string | null;
-      pant_size: string | null;
-      tshirt_size: string | null;
-      short_size: string | null;
-    }[] = [];
-
-    chunkResults.forEach(({ data: chunkSizes }) => {
-      if (chunkSizes) {
-        allSizes.push(...chunkSizes);
-      }
-    });
-
-    const configMap = new Map<string, string>();
-    (configItems || []).forEach((ci) => {
-      configMap.set(ci.id, ci.item_name.trim().toLowerCase());
-    });
-
-    allSizes.forEach((s) => {
-      if (s.dynamic_sizes && typeof s.dynamic_sizes === "object") {
-        Object.entries(s.dynamic_sizes as Record<string, string>).forEach(([key, val]) => {
-          if (val && String(val).trim() !== "") {
-            const mappedName = (configMap.get(key) || key).trim().toLowerCase();
-            if (!itemStudentSets.has(mappedName)) {
-              itemStudentSets.set(mappedName, new Set());
-            }
-            itemStudentSets.get(mappedName)!.add(s.student_id);
-          }
-        });
-      }
-      if (s.shirt_size && String(s.shirt_size).trim() !== "") {
-        if (!itemStudentSets.has("shirt")) itemStudentSets.set("shirt", new Set());
-        itemStudentSets.get("shirt")!.add(s.student_id);
-      }
-      if (s.pant_size && String(s.pant_size).trim() !== "") {
-        if (!itemStudentSets.has("pant")) itemStudentSets.set("pant", new Set());
-        itemStudentSets.get("pant")!.add(s.student_id);
-      }
-      if (s.tshirt_size && String(s.tshirt_size).trim() !== "") {
-        if (!itemStudentSets.has("tshirt")) itemStudentSets.set("tshirt", new Set());
-        itemStudentSets.get("tshirt")!.add(s.student_id);
-      }
-      if (s.short_size && String(s.short_size).trim() !== "") {
-        if (!itemStudentSets.has("short")) itemStudentSets.set("short", new Set());
-        itemStudentSets.get("short")!.add(s.student_id);
-      }
-    });
-  }
-
-  // Aggregate items from historical requirement_items snapshot
-  const itemSummaryMap = new Map<
-    string,
-    { itemName: string; totalQuantity: number; studentCount: number | null }
-  >();
-
-  (requirementItems || []).forEach((item) => {
-    const rawName = item.item_name || "Unknown Item";
-    const key = rawName.trim().toLowerCase();
-
-    if (!itemSummaryMap.has(key)) {
-      itemSummaryMap.set(key, {
-        itemName: rawName.trim(),
-        totalQuantity: 0,
-        studentCount: null,
-      });
-    }
-
-    const entry = itemSummaryMap.get(key)!;
-    entry.totalQuantity += item.quantity || 0;
-  });
-
-  const hasStudentTracking = studentIds.length > 0;
-  itemSummaryMap.forEach((entry, key) => {
-    if (hasStudentTracking) {
-      const studentSet = itemStudentSets.get(key);
-      entry.studentCount = studentSet ? studentSet.size : 0;
-    } else {
-      entry.studentCount = null;
-    }
-  });
-
-  const dynamicItems = Array.from(itemSummaryMap.values());
-
-  // 6. Fetch Packing Checklist Items if packing record exists
-  let checklistItems: {
-    id: string;
-    packing_record_id: string;
-    item_key: string;
-    label: string;
-    is_completed: boolean;
-    completed_by: string | null;
-    completed_at: string | null;
-  }[] = [];
-
-  if (packingRecord) {
-    const { data: checklistData } = await supabase
-      .from("packing_checklist_items")
-      .select("*")
-      .eq("packing_record_id", packingRecord.id)
-      .order("created_at", { ascending: true });
-    checklistItems = checklistData || [];
-  }
-
-  interface RawPackingHistoryItem {
+  interface RawHistoryItem {
     id: string;
     from_status: string | null;
     to_status: string;
@@ -259,41 +153,47 @@ export default async function AdminPackingDeliveryDetailsPage({
     created_at: string;
     changed_by: string;
     profiles:
-    | { id: string; full_name: string | null; role: string }
-    | { id: string; full_name: string | null; role: string }[]
-    | null;
+      | { id: string; full_name: string | null; role: string }
+      | { id: string; full_name: string | null; role: string }[]
+      | null;
   }
 
-  const rawHistory = (packingHistoryRaw || []) as unknown as RawPackingHistoryItem[];
-  const formattedPackingHistory = rawHistory.map((item) => ({
+  const rawHistory = (packingHistoryRaw || []) as unknown as RawHistoryItem[];
+  const formattedHistory = rawHistory.map((item) => ({
     ...item,
     profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles,
   }));
 
-  // 8. Fetch Order Status History for delivery lifecycle
-  const { data: orderStatusHistory } = await supabase
-    .from("order_status_history")
-    .select("*")
-    .eq("order_id", id)
-    .order("created_at", { ascending: false });
-
   const formattedOrder = {
     ...order,
     schools: Array.isArray(order.schools) ? order.schools[0] : order.schools,
-    requirements: requirementRecord,
   };
+
+  // Generate temporary signed URLs for delivery proof images
+  let proofImages: DeliveryProofImage[] = [];
+  if (proofImagesRaw && proofImagesRaw.length > 0) {
+    const paths = proofImagesRaw.map((p) => p.storage_path);
+    const { data: signedUrls } = await supabase.storage
+      .from("delivery-proofs")
+      .createSignedUrls(paths, 3600);
+    const signedMap = new Map((signedUrls || []).map((s) => [s.path, s.signedUrl]));
+    proofImages = proofImagesRaw.map((img) => ({
+      ...img,
+      profiles: Array.isArray(img.profiles) ? img.profiles[0] : img.profiles,
+      signed_url: signedMap.get(img.storage_path) || null,
+    }));
+  }
 
   return (
     <AdminPackingDeliveryDetailsView
       order={formattedOrder}
-      requirementItems={requirementItems || []}
       qcRecord={qcRecord || null}
+      deliveryItems={deliveryItems}
       packingRecord={packingRecord || null}
-      checklistItems={checklistItems}
-      packingHistory={formattedPackingHistory}
+      packingHistory={formattedHistory}
       orderStatusHistory={orderStatusHistory || []}
-      totalStudents={totalStudents}
-      dynamicItems={dynamicItems}
+      proofImages={proofImages}
     />
   );
 }
+

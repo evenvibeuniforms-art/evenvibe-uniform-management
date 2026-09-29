@@ -1,54 +1,41 @@
 "use client";
 
-import { useState, startTransition } from "react";
+import { useState, useMemo, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRealtimeSubscription } from "@/lib/supabase/useRealtime";
+import { toast } from "sonner";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Play,
+  Save,
+  CheckCheck,
+  Truck,
+  ChevronDown,
+  ChevronUp,
+  Printer,
+  Loader2,
+  Package,
+  History,
+  ShieldCheck,
+} from "lucide-react";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import AdminOrderQuantityBreakdown from "../../orders/views/AdminOrderQuantityBreakdown";
+  calculateQualityCheck,
+  StoredPackingOutputItem,
+  StoredQCItem,
+  QCRowStatus,
+} from "@/lib/qualityCheck/qualityCheckEngine";
 import {
   startQualityCheck,
-  updateQualityCheckProgress,
-  updateQualityCheckRemarks,
+  saveOrderQualityCheckItems,
   completeQualityCheck,
 } from "../actions";
-import { toast } from "sonner";
-import {
-  ArrowLeft,
-  ClipboardCheck,
-  CheckCircle2,
-  AlertCircle,
-  Play,
-  Edit3,
-  History,
-  Layers,
-  Building2,
-  Calendar,
-  Sparkles,
-  Factory,
-  Truck,
-  Loader2,
-} from "lucide-react";
-import Link from "next/link";
-
-export interface DynamicItemSummary {
-  itemName: string;
-  totalQuantity: number;
-  studentCount: number | null;
-}
 
 interface OrderInfo {
   id: string;
@@ -57,22 +44,6 @@ interface OrderInfo {
   created_at: string;
   updated_at: string;
   schools?: { id: string; name: string } | null;
-  requirements?: {
-    id: string;
-    requirement_number: string;
-    total_students: number | null;
-  } | null;
-}
-
-interface ReqItem {
-  id: string;
-  requirement_id: string;
-  class_name: string | null;
-  section_name: string | null;
-  gender: string | null;
-  item_name: string;
-  size: string;
-  quantity: number;
 }
 
 interface QualityCheckRecord {
@@ -93,6 +64,8 @@ interface QualityCheckRecord {
 
 interface QCHistoryItem {
   id: string;
+  quality_check_id: string;
+  order_id: string;
   from_status: string | null;
   to_status: string;
   note: string | null;
@@ -101,1428 +74,992 @@ interface QCHistoryItem {
   profiles?: {
     id: string;
     full_name: string | null;
-    role: string;
+    role: string | null;
   } | null;
 }
 
-interface ProductionSummary {
-  stage: string;
-  completed_at: string | null;
-  updated_at: string;
-}
-
-const formatDate = (dateString: string | null, includeTime = false) => {
-  if (!dateString) return "—";
-  const d = new Date(dateString);
-  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-  if (includeTime) {
-    options.hour = "2-digit";
-    options.minute = "2-digit";
-  }
-  return d.toLocaleDateString("en-US", options);
-};
-
-const formatItemName = (name: string) => {
-  if (!name) return "";
-  return name.replace(/\b\w/g, (c) => c.toUpperCase());
-};
-
-const getQCBadgeColor = (status: string) => {
-  switch (status) {
-    case "ready_for_qc":
-      return "bg-amber-100 text-amber-800 border-amber-200";
-    case "pending":
-      return "bg-slate-100 text-slate-800 border-slate-200";
-    case "in_progress":
-      return "bg-blue-100 text-blue-800 border-blue-200";
-    case "passed":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    case "failed":
-      return "bg-rose-100 text-rose-800 border-rose-200";
-    default:
-      return "bg-slate-100 text-slate-800 border-slate-200";
-  }
-};
-
-const formatQCStatusLabel = (status: string) => {
-  switch (status) {
-    case "ready_for_qc":
-      return "Ready for QC";
-    case "pending":
-      return "Pending Inspection";
-    case "in_progress":
-      return "Inspection In Progress";
-    case "passed":
-      return "Passed";
-    case "failed":
-      return "Failed";
-    default:
-      return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-};
-
-export default function AdminQualityCheckDetailsView({
-  order: initialOrder,
-  requirementItems,
-  qcRecord: initialQcRecord,
-  qcHistory,
-  productionSummary: initialProductionSummary,
-  totalStudents,
-  dynamicItems,
-}: {
+interface AdminQualityCheckDetailsViewProps {
   order: OrderInfo;
-  requirementItems: ReqItem[];
+  packingItems: StoredPackingOutputItem[];
+  qcItems: StoredQCItem[];
   qcRecord: QualityCheckRecord | null;
   qcHistory: QCHistoryItem[];
-  productionSummary: ProductionSummary | null;
-  totalStudents: number;
-  dynamicItems: DynamicItemSummary[];
-}) {
+}
+
+export default function AdminQualityCheckDetailsView({
+  order,
+  packingItems,
+  qcItems,
+  qcRecord,
+  qcHistory,
+}: AdminQualityCheckDetailsViewProps) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [isCompletingQC, setIsCompletingQC] = useState(false);
+  const isOperating = isSavingProgress || isCompletingQC || isPending;
 
-  const [order, setOrder] = useState<OrderInfo>(initialOrder);
-  const [qcRecord, setQcRecord] = useState<QualityCheckRecord | null>(initialQcRecord);
-  const [productionSummary, setProductionSummary] = useState<ProductionSummary | null>(initialProductionSummary);
+  // Live input states: rowKey -> value string
+  const [livePassedInputs, setLivePassedInputs] = useState<Record<string, string>>({});
+  const [liveRemarksInputs, setLiveRemarksInputs] = useState<Record<string, string>>({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
-  // Realtime subscription for order updates
-  useRealtimeSubscription({
-    table: "orders",
-    filter: `id=eq.${order.id}`,
-    onEvent: (payload) => {
-      if (payload.eventType === "UPDATE" && payload.new) {
-        const updated = payload.new as Record<string, unknown>;
-        setOrder((prev) => ({
-          ...prev,
-          status: (updated.status as string) || prev.status,
-          updated_at: (updated.updated_at as string) || prev.updated_at,
-        }));
-      }
-    },
-  });
-
-  // Realtime subscription for QC record changes
-  useRealtimeSubscription({
-    table: "quality_check_records",
-    filter: `order_id=eq.${order.id}`,
-    onEvent: (payload) => {
-      if (payload.new) {
-        const updated = payload.new as unknown as QualityCheckRecord;
-        setQcRecord(updated);
-        setEditCheckedQty(updated.checked_quantity || 0);
-        setEditPassedQty(updated.passed_quantity || 0);
-        setEditDefectiveQty(updated.defective_quantity || 0);
-        setEditRemarks(updated.remarks || "");
-        toast.info("Quality Check details updated in real time");
-        startTransition(() => {
-          router.refresh();
-        });
-      }
-    },
-  });
-
-  // Realtime subscription for QC history
-  useRealtimeSubscription({
-    table: "quality_check_history",
-    onEvent: (payload) => {
-      if (payload.eventType === "INSERT") {
-        startTransition(() => {
-          router.refresh();
-        });
-      }
-    },
-  });
-
-  // Realtime subscription for production record changes
-  useRealtimeSubscription({
-    table: "production_records",
-    filter: `order_id=eq.${order.id}`,
-    onEvent: (payload) => {
-      if (payload.new) {
-        const updated = payload.new as Record<string, unknown>;
-        setProductionSummary((prev) =>
-          prev
-            ? {
-                ...prev,
-                stage: (updated.stage as string) || prev.stage,
-                completed_at: (updated.completed_at as string) ?? prev.completed_at,
-                updated_at: (updated.updated_at as string) || prev.updated_at,
-              }
-            : null
-        );
-        startTransition(() => {
-          router.refresh();
-        });
-      }
-    },
-  });
-
-  // Dialog States
-  const [showStartDialog, setShowStartDialog] = useState(false);
-  const [startRemarks, setStartRemarks] = useState("");
-  const [isStarting, setIsStarting] = useState(false);
-
-  const [showProgressDialog, setShowProgressDialog] = useState(false);
-  const [editCheckedQty, setEditCheckedQty] = useState<number>(initialQcRecord?.checked_quantity || 0);
-  const [editPassedQty, setEditPassedQty] = useState<number>(initialQcRecord?.passed_quantity || 0);
-  const [editDefectiveQty, setEditDefectiveQty] = useState<number>(initialQcRecord?.defective_quantity || 0);
-  const [progressNote, setProgressNote] = useState("");
-  const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
-
-  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
-  const [completionNote, setCompletionNote] = useState("");
-  const [isCompleting, setIsCompleting] = useState(false);
-
-  const [showRemarksDialog, setShowRemarksDialog] = useState(false);
-  const [editRemarks, setEditRemarks] = useState(initialQcRecord?.remarks || "");
-  const [isUpdatingRemarks, setIsUpdatingRemarks] = useState(false);
-
-  // Derived Values
-  const historicalTotalItems = requirementItems.reduce((acc, item) => acc + (item.quantity || 0), 0);
-  const totalQuantity = qcRecord ? qcRecord.total_quantity : historicalTotalItems;
-
-  const isReadyForQC =
-    (order.status === "production" &&
-      productionSummary?.stage === "production_completed" &&
-      !qcRecord) ||
-    (order.status === "quality_check" && (!qcRecord || qcRecord.status === "pending"));
-
-  const currentQCStatus = qcRecord
-    ? qcRecord.status
-    : isReadyForQC
-    ? (order.status === "quality_check" ? "pending" : "ready_for_qc")
-    : "pending";
-
-  const checkedQuantity = qcRecord ? qcRecord.checked_quantity : 0;
-  const passedQuantity = qcRecord ? qcRecord.passed_quantity : 0;
-  const defectiveQuantity = qcRecord ? qcRecord.defective_quantity : 0;
-  const pendingQuantity = Math.max(0, totalQuantity - checkedQuantity);
-
-  // Progress is defined as checked / total
-  const progressPercent = totalQuantity > 0 ? Math.round((checkedQuantity / totalQuantity) * 100) : 0;
-
-  // Handlers
-  const handleStartQC = async () => {
-    setIsStarting(true);
-    const res = await startQualityCheck(order.id, startRemarks);
-    if (res.error) {
-      toast.error(res.error);
-    } else {
-      toast.success("Quality Check started successfully!");
-      setShowStartDialog(false);
-      setStartRemarks("");
-      setQcRecord((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "in_progress",
-              started_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }
-          : {
-              id: res.qcId || "qc-active",
-              order_id: order.id,
-              status: "in_progress",
-              total_quantity: res.totalQuantity || totalQuantity,
-              checked_quantity: 0,
-              passed_quantity: 0,
-              defective_quantity: 0,
-              remarks: startRemarks || null,
-              started_at: new Date().toISOString(),
-              completed_at: null,
-              checked_by: null,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }
-      );
-      setOrder((prev) => ({ ...prev, status: "quality_check" }));
-      router.refresh();
+  // Helper for friendly error messages to prevent raw PostgreSQL errors from displaying
+  const formatFriendlyError = (errorMsg?: string | null): string => {
+    if (!errorMsg) return "Unable to complete Quality Check. Please try again.";
+    if (errorMsg.includes("Passed Quantity cannot be greater than")) {
+      return "Passed Quantity cannot be greater than Packed Quantity.";
     }
-    setIsStarting(false);
-  };
-
-  const handleUpdateProgress = async () => {
     if (
-      !Number.isInteger(editCheckedQty) ||
-      !Number.isInteger(editPassedQty) ||
-      !Number.isInteger(editDefectiveQty)
+      errorMsg.includes("enter Passed Quantity for all sizes") ||
+      errorMsg.includes("missing")
     ) {
-      toast.error("All quantities must be whole numbers");
-      return;
+      return "Please enter Passed Quantity for all sizes.";
     }
-
-    if (editCheckedQty < 0 || editPassedQty < 0 || editDefectiveQty < 0) {
-      toast.error("Quantities cannot be negative");
-      return;
+    if (
+      errorMsg.includes("violates check constraint") ||
+      errorMsg.includes("syntax error") ||
+      errorMsg.includes("relation") ||
+      errorMsg.includes("RPC error")
+    ) {
+      return "Unable to complete Quality Check. Please try again.";
     }
-
-    if (editCheckedQty > totalQuantity) {
-      toast.error(`Checked quantity cannot exceed total quantity (${totalQuantity})`);
-      return;
-    }
-
-    if (editPassedQty + editDefectiveQty !== editCheckedQty) {
-      toast.error(
-        "Passed and defective quantities must equal the checked quantity."
-      );
-      return;
-    }
-
-    setIsUpdatingProgress(true);
-    const res = await updateQualityCheckProgress(
-      order.id,
-      editCheckedQty,
-      editPassedQty,
-      editDefectiveQty,
-      progressNote
-    );
-
-    if (res.error) {
-      toast.error(res.error);
-    } else {
-      toast.success("Quality check inspection progress saved!");
-      setShowProgressDialog(false);
-      setProgressNote("");
-      setQcRecord((prev) =>
-        prev
-          ? {
-              ...prev,
-              checked_quantity: editCheckedQty,
-              passed_quantity: editPassedQty,
-              defective_quantity: editDefectiveQty,
-              updated_at: new Date().toISOString(),
-            }
-          : null
-      );
-      router.refresh();
-    }
-    setIsUpdatingProgress(false);
+    return errorMsg;
   };
 
+  // Derive QC Calculation from authoritative packed items, saved QC items, and live inputs
+  const qcData = useMemo(() => {
+    return calculateQualityCheck({
+      savedPackingItems: packingItems,
+      savedQCItems: qcItems,
+      liveInputs: {
+        passedInputs: livePassedInputs,
+        remarksInputs: liveRemarksInputs,
+      },
+    });
+  }, [packingItems, qcItems, livePassedInputs, liveRemarksInputs]);
+
+  // Section 1, 2, 6, 12, 13: Authoritative QC Completion Rule
+  // QC is completed ONLY when:
+  // 1. The persisted QC record status is 'completed' (or legacy 'passed')
+  // 2. AND all operational sizes are complete (every row has an explicit 0 <= passed <= packed)
+  // 3. AND pending === 0
+  // QC is NEVER completed if pending > 0 or any operational row is missing passed quantity!
+  // NEVER infer QC completion from order.status === "packed"!
+  const isTrulyCompleted = Boolean(
+    (qcRecord?.status === "completed" || qcRecord?.status === "passed") &&
+    qcData.hasOperationalPieces &&
+    qcData.allSizesComplete &&
+    qcData.totalPendingPieces === 0
+  );
+
+  const qcStatus: "pending" | "in_progress" | "completed" = useMemo(() => {
+    if (isTrulyCompleted) {
+      return "completed";
+    }
+    if (
+      qcRecord?.status === "in_progress" ||
+      qcData.totalCheckedPieces > 0 ||
+      hasUnsavedChanges
+    ) {
+      return "in_progress";
+    }
+    return "pending";
+  }, [isTrulyCompleted, qcRecord?.status, qcData.totalCheckedPieces, hasUnsavedChanges]);
+
+  const isCompleted = isTrulyCompleted;
+
+  // Check if Start Quality Check can be shown
+  const canStartQC =
+    !isCompleted &&
+    qcData.hasOperationalPieces &&
+    (qcStatus === "pending" || !qcRecord || qcRecord.status === "pending");
+
+  // Handle Passed input change
+  const handlePassedChange = (rowKey: string, val: string) => {
+    setLivePassedInputs((prev) => ({
+      ...prev,
+      [rowKey]: val,
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  // Handle Remarks input change
+  const handleRemarksChange = (rowKey: string, val: string) => {
+    setLiveRemarksInputs((prev) => ({
+      ...prev,
+      [rowKey]: val,
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  // Start Quality Check handler
+  const handleStartQC = () => {
+    if (isOperating) return;
+    startTransition(async () => {
+      const res = await startQualityCheck(order.id);
+      if (res.error) {
+        console.error("Start QC error:", res.error);
+        toast.error(formatFriendlyError(res.error));
+      } else {
+        toast.success("Quality check started successfully.");
+        router.refresh();
+      }
+    });
+  };
+
+  // Save Progress handler (Saves latest progress without completing)
+  const handleSaveProgress = async () => {
+    if (isOperating) return;
+
+    if (!qcData.hasOperationalPieces) {
+      toast.error("No operational pieces to save.");
+      return;
+    }
+
+    // Build payload of all rows across groups
+    const payloadItems: Array<{
+      item_name: string;
+      style_id?: string | null;
+      style_name?: string | null;
+      color?: string | null;
+      size: string;
+      passed_quantity: number | null;
+      remarks?: string | null;
+    }> = [];
+
+    let hasClientValidationError = false;
+    let clientErrorMessage = "";
+
+    for (const group of qcData.groups) {
+      for (const row of group.sizeRows) {
+        if (!row.isValid) {
+          hasClientValidationError = true;
+          clientErrorMessage = row.errorMessage || "Please check entered quantities.";
+          break;
+        }
+
+        payloadItems.push({
+          item_name: group.itemName,
+          style_id: group.styleId,
+          style_name: group.styleName,
+          color: group.color,
+          size: row.size,
+          passed_quantity: row.passedQuantity,
+          remarks: row.remarks || null,
+        });
+      }
+      if (hasClientValidationError) break;
+    }
+
+    if (hasClientValidationError) {
+      toast.error(clientErrorMessage);
+      return;
+    }
+
+    setIsSavingProgress(true);
+    try {
+      const res = await saveOrderQualityCheckItems(order.id, payloadItems);
+      if (res.error) {
+        console.error("Save QC progress error:", res.error);
+        toast.error(formatFriendlyError(res.error));
+      } else {
+        toast.success("Quality check progress saved successfully.");
+        setHasUnsavedChanges(false);
+        router.refresh();
+      }
+    } catch (err: unknown) {
+      console.error("Save QC progress unexpected error:", err);
+      toast.error("Unable to save Quality Check progress. Please try again.");
+    } finally {
+      setIsSavingProgress(false);
+    }
+  };
+
+  // Complete Quality Check handler
+  // STRICT SEQUENTIAL FLOW: Validate -> SAVE -> WAIT -> COMPLETE -> REFRESH
   const handleCompleteQC = async () => {
-    const currentChecked = editCheckedQty;
-    const currentPassed = editPassedQty;
-    const currentDefective = editDefectiveQty;
+    if (isOperating) return;
 
-    if (currentChecked !== totalQuantity) {
-      toast.error(
-        `All ${totalQuantity} items must be inspected before completion (${currentChecked} checked)`
-      );
+    if (!qcData.canComplete) {
+      if (
+        qcData.totalPendingPieces > 0 ||
+        qcData.totalCompletedSizesCount < qcData.totalRequiredSizesCount
+      ) {
+        toast.error("Please enter Passed Quantity for all sizes.");
+      } else {
+        toast.error("Passed Quantity cannot be greater than Packed Quantity.");
+      }
       return;
     }
 
-    if (currentPassed + currentDefective !== currentChecked) {
-      toast.error(
-        `Passed (${currentPassed}) + Defective (${currentDefective}) must equal Checked (${currentChecked})`
-      );
+    // Build items payload
+    const payloadItems: Array<{
+      item_name: string;
+      style_id?: string | null;
+      style_name?: string | null;
+      color?: string | null;
+      size: string;
+      passed_quantity: number | null;
+      remarks?: string | null;
+    }> = [];
+
+    let hasValidationError = false;
+    let validationErrorMessage = "";
+
+    for (const group of qcData.groups) {
+      for (const row of group.sizeRows) {
+        if (!row.isValid) {
+          hasValidationError = true;
+          validationErrorMessage = row.errorMessage || "Please check entered quantities.";
+          break;
+        }
+        if (row.passedQuantity === null || row.passedQuantity === undefined) {
+          hasValidationError = true;
+          validationErrorMessage = "Please enter Passed Quantity for all sizes.";
+          break;
+        }
+        payloadItems.push({
+          item_name: group.itemName,
+          style_id: group.styleId,
+          style_name: group.styleName,
+          color: group.color,
+          size: row.size,
+          passed_quantity: row.passedQuantity,
+          remarks: row.remarks || null,
+        });
+      }
+      if (hasValidationError) break;
+    }
+
+    if (hasValidationError) {
+      toast.error(validationErrorMessage);
       return;
     }
 
-    // If inputs were changed compared to qcRecord, save progress first
-    if (
-      qcRecord &&
-      (qcRecord.checked_quantity !== currentChecked ||
-        qcRecord.passed_quantity !== currentPassed ||
-        qcRecord.defective_quantity !== currentDefective)
-    ) {
-      const saveRes = await updateQualityCheckProgress(
-        order.id,
-        currentChecked,
-        currentPassed,
-        currentDefective,
-        completionNote
-      );
+    setIsCompletingQC(true);
+    try {
+      // 1. SAVE QC ITEMS FIRST
+      const saveRes = await saveOrderQualityCheckItems(order.id, payloadItems);
       if (saveRes.error) {
-        toast.error(`Failed to save latest progress: ${saveRes.error}`);
+        console.error("Save QC items before completion error:", saveRes.error);
+        toast.error(formatFriendlyError(saveRes.error));
+        // If save fails, DO NOT call completeQualityCheck!
         return;
       }
-    }
 
-    setIsCompleting(true);
-    const res = await completeQualityCheck(order.id, completionNote);
-
-    if (res.error) {
-      toast.error(res.error);
-    } else {
-      if (res.status === "passed") {
-        toast.success("Quality Check PASSED! Order handed off to Packing.");
-        setQcRecord((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: "passed",
-                completed_at: new Date().toISOString(),
-                checked_quantity: currentChecked,
-                passed_quantity: currentPassed,
-                defective_quantity: currentDefective,
-              }
-            : null
-        );
-        setOrder((prev) => ({ ...prev, status: "packed" }));
-      } else {
-        toast.error(`Quality Check FAILED with ${res.defectiveQuantity} defective items.`);
-        setQcRecord((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: "failed",
-                completed_at: new Date().toISOString(),
-                checked_quantity: currentChecked,
-                passed_quantity: currentPassed,
-                defective_quantity: currentDefective,
-              }
-            : null
-        );
+      // 2. COMPLETE QUALITY CHECK (passing latest items to guarantee atomic DB completion)
+      const completeRes = await completeQualityCheck(
+        order.id,
+        payloadItems,
+        "Quality check completed by Admin"
+      );
+      if (completeRes.error) {
+        console.error("Complete Quality Check error:", completeRes.error);
+        toast.error(formatFriendlyError(completeRes.error));
+        return;
       }
-      setShowCompleteDialog(false);
-      setCompletionNote("");
+
+      // 3. SUCCESS & REFRESH
+      toast.success("Quality Check completed successfully.");
+      setHasUnsavedChanges(false);
       router.refresh();
+    } catch (err: unknown) {
+      console.error("Complete Quality Check unexpected error:", err);
+      toast.error("Unable to complete Quality Check. Please try again.");
+    } finally {
+      setIsCompletingQC(false);
     }
-    setIsCompleting(false);
   };
 
-  const handleSaveRemarks = async () => {
-    setIsUpdatingRemarks(true);
-    const res = await updateQualityCheckRemarks(order.id, editRemarks);
-    if (res.error) {
-      toast.error(res.error);
-    } else {
-      toast.success("Remarks updated successfully");
-      setShowRemarksDialog(false);
-      router.refresh();
+  // Helper for row status badge
+  const renderRowStatusBadge = (status: QCRowStatus) => {
+    switch (status) {
+      case "passed":
+        return (
+          <Badge className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium border-0 px-2.5 py-0.5">
+            Passed
+          </Badge>
+        );
+      case "defective":
+        return (
+          <Badge className="bg-status-error hover:bg-rose-700 text-white font-medium border-0 px-2.5 py-0.5">
+            Defective
+          </Badge>
+        );
+      case "partial":
+        return (
+          <Badge className="bg-evenvibe-primary hover:bg-blue-700 text-white font-medium border-0 px-2.5 py-0.5">
+            Partial
+          </Badge>
+        );
+      case "invalid":
+        return (
+          <Badge variant="destructive" className="font-medium px-2.5 py-0.5">
+            Invalid
+          </Badge>
+        );
+      case "pending":
+      default:
+        return (
+          <Badge variant="secondary" className="bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-medium px-2.5 py-0.5">
+            Pending
+          </Badge>
+        );
     }
-    setIsUpdatingRemarks(false);
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* Top Navigation & Breadcrumbs */}
+      <div className="flex items-center justify-between gap-4">
+        <Link
+          href="/admin/quality-check"
+          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Quality Check List
+        </Link>
+
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            size="icon"
-            onClick={() => router.push("/admin/quality-check")}
-            className="h-9 w-9 shrink-0"
+            size="sm"
+            onClick={() => window.print()}
+            className="hidden sm:inline-flex items-center gap-1.5"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <Printer className="w-4 h-4 text-slate-500" />
+            Print
           </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                Order #{order.order_number}
-              </h1>
-              <Badge
-                variant="outline"
-                className={`px-2.5 py-0.5 text-xs font-semibold ${getQCBadgeColor(currentQCStatus)}`}
-              >
-                {formatQCStatusLabel(currentQCStatus)}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground flex items-center gap-2 mt-0.5">
-              <Building2 className="h-3.5 w-3.5" />
-              {order.schools?.name}
-              <span className="text-slate-300">•</span>
-              <span className="capitalize">Lifecycle: {order.status.replace(/_/g, " ")}</span>
-            </p>
-          </div>
-        </div>
 
-        {/* Primary Action Buttons */}
-        <div className="flex items-center gap-2">
-          {(isReadyForQC || currentQCStatus === "pending" || currentQCStatus === "ready_for_qc") && (
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm font-medium"
-              onClick={() => setShowStartDialog(true)}
-              disabled={isStarting}
-            >
-              {isStarting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {isStarting ? "Starting..." : "Start Inspection"}
-            </Button>
-          )}
-
-          {currentQCStatus === "in_progress" && (
-            <>
-              <Button
-                variant="outline"
-                className="border-slate-300 hover:bg-slate-50 gap-1.5"
-                onClick={() => {
-                  setShowProgressDialog(true);
-                }}
-              >
-                <Edit3 className="h-3.5 w-3.5" />
-                Record Inspection
-              </Button>
-
-              <Button
-                className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 shadow-sm"
-                disabled={editCheckedQty < totalQuantity || editPassedQty + editDefectiveQty !== editCheckedQty}
-                onClick={() => {
-                  if (editCheckedQty < totalQuantity) {
-                    toast.error(
-                      `Please inspect all ${totalQuantity} items before completing QC (${editCheckedQty} checked)`
-                    );
-                    return;
-                  }
-                  setShowCompleteDialog(true);
-                }}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Complete QC
-              </Button>
-            </>
-          )}
-
-          {(order.status === "packed" || currentQCStatus === "passed" || ["dispatched", "in_transit", "delivered"].includes(order.status)) && (
+          {isCompleted && (
             <Link href={`/admin/packing-delivery/${order.id}`}>
-              <Button variant="outline" size="sm" className="border-slate-300 hover:bg-slate-50 gap-1.5 text-teal-800">
-                <Truck className="h-4 w-4 text-teal-600" />
-                View Packing & Delivery
+              <Button className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm">
+                <Truck className="w-4 h-4" />
+                Go to Delivery
               </Button>
             </Link>
           )}
-
-          <Link href={`/admin/production/${order.id}`}>
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-slate-900 gap-1.5">
-              <Factory className="h-4 w-4" />
-              Production Workspace
-            </Button>
-          </Link>
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="w-full justify-start border-b rounded-none px-0 h-auto pb-1 bg-transparent space-x-6">
-          <TabsTrigger
-            value="overview"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1 font-semibold"
-          >
-            QC Inspection Overview
-          </TabsTrigger>
-          <TabsTrigger
-            value="breakdown"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1 font-semibold"
-          >
-            Quantity Breakdown
-          </TabsTrigger>
-          <TabsTrigger
-            value="timeline"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1 font-semibold"
-          >
-            QC Audit Trail ({qcHistory.length})
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Tab 1: QC Inspection Overview */}
-        <TabsContent value="overview" className="mt-6 space-y-6">
-          {/* Top KPI Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-5 gap-4">
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-muted-foreground font-medium">Total Quantity</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{totalQuantity}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Order snapshot</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-muted-foreground font-medium">Checked Quantity</p>
-                <p className="text-2xl font-bold text-blue-700 mt-1">{checkedQuantity}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{progressPercent}% inspected</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-muted-foreground font-medium">Passed Quantity</p>
-                <p className="text-2xl font-bold text-emerald-700 mt-1">{passedQuantity}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Approved items</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-muted-foreground font-medium">Defective Quantity</p>
-                <p className="text-2xl font-bold text-rose-700 mt-1">{defectiveQuantity}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Faulty items</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-muted-foreground font-medium">Pending Inspection</p>
-                <p className="text-2xl font-bold text-amber-700 mt-1">{pendingQuantity}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Remaining</p>
-              </CardContent>
-            </Card>
+      {/* 3. PAGE HEADER */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-xs uppercase font-bold tracking-wider text-evenvibe-primary dark:-evenvibe-primary bg-evenvibe-light dark:bg-evenvibe-deep/60 px-2.5 py-1 rounded-md">
+              Quality Check
+            </span>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              Order #{order.order_number}
+            </h1>
+            {/* Status Badge */}
+            {isCompleted ? (
+              <Badge className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium border-0 px-3 py-1 text-xs">
+                QC Completed
+              </Badge>
+            ) : qcStatus === "in_progress" ? (
+              <Badge className="bg-status-warning hover:bg-amber-700 text-white font-medium border-0 px-3 py-1 text-xs">
+                QC In Progress
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-medium px-3 py-1 text-xs">
+                Pending QC
+              </Badge>
+            )}
           </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            School:{" "}
+            <span className="font-semibold text-slate-800 dark:text-slate-200">
+              {order.schools?.name || "Unknown School"}
+            </span>
+          </p>
+        </div>
 
-          {/* Progress Bar */}
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <ClipboardCheck className="h-5 w-5 text-emerald-600" />
-                    Inspection Progress
-                  </CardTitle>
-                  <CardDescription>
-                    {checkedQuantity} of {totalQuantity} items inspected ({progressPercent}%)
-                  </CardDescription>
-                </div>
-                {qcRecord?.status === "in_progress" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setEditCheckedQty(qcRecord.checked_quantity);
-                      setEditPassedQty(qcRecord.passed_quantity);
-                      setEditDefectiveQty(qcRecord.defective_quantity);
-                      setShowProgressDialog(true);
-                    }}
-                    className="h-8 gap-1 text-xs"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                    Update Progress
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden flex">
-                <div
-                  className="bg-emerald-500 h-full transition-all duration-500"
-                  style={{
-                    width: totalQuantity > 0 ? `${(passedQuantity / totalQuantity) * 100}%` : "0%",
-                  }}
-                  title={`Passed: ${passedQuantity}`}
-                />
-                <div
-                  className="bg-rose-500 h-full transition-all duration-500"
-                  style={{
-                    width: totalQuantity > 0 ? `${(defectiveQuantity / totalQuantity) * 100}%` : "0%",
-                  }}
-                  title={`Defective: ${defectiveQuantity}`}
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 pt-1">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                    Passed: <strong>{passedQuantity}</strong>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                    Defective: <strong>{defectiveQuantity}</strong>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-slate-200 border" />
-                    Pending: <strong>{pendingQuantity}</strong>
-                  </span>
-                </div>
-                <div>
-                  {qcRecord?.status === "passed" && (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">
-                      ✓ Inspection Completed & Approved
-                    </Badge>
-                  )}
-                  {qcRecord?.status === "failed" && (
-                    <Badge className="bg-rose-100 text-rose-800 border-rose-300">
-                      ✗ Inspection Failed ({defectiveQuantity} defects)
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Action / Processing Section */}
-          {(currentQCStatus === "pending" || currentQCStatus === "ready_for_qc") && (
-            <Card className="border-emerald-200 bg-emerald-50/40 shadow-sm">
-              <CardHeader className="pb-3">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="space-y-1">
-                    <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
-                      <Play className="h-5 w-5 text-emerald-600" />
-                      Start Quality Check Inspection
-                    </CardTitle>
-                    <CardDescription className="text-xs text-slate-600">
-                      Total items to inspect: <strong>{totalQuantity}</strong>. Click Start Inspection to begin recording garment measurements and defect counts.
-                    </CardDescription>
-                  </div>
-                  <Button
-                    onClick={() => setShowStartDialog(true)}
-                    disabled={isStarting}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0 shadow-sm font-semibold"
-                  >
-                    {isStarting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Play className="h-4 w-4" />
-                    )}
-                    {isStarting ? "Starting..." : "Start Inspection"}
-                  </Button>
-                </div>
-              </CardHeader>
-            </Card>
-          )}
-
-          {currentQCStatus === "in_progress" && (
-            <Card className="border-indigo-100 shadow-sm">
-              <CardHeader className="pb-3 bg-slate-50/70 border-b">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
-                      <ClipboardCheck className="h-5 w-5 text-indigo-600" />
-                      Inspection Processing
-                    </CardTitle>
-                    <CardDescription className="text-xs text-slate-500 mt-0.5">
-                      Enter and save physical inspection results. Passed + Defective must equal Checked quantity. Total order items: <strong>{totalQuantity}</strong>.
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100 font-medium">
-                      Pending: {Math.max(0, totalQuantity - editCheckedQty)} items
-                    </span>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="qc-checked-qty" className="text-xs font-semibold text-slate-700">
-                      Checked Quantity
-                    </Label>
-                    <Input
-                      id="qc-checked-qty"
-                      type="number"
-                      min={0}
-                      max={totalQuantity}
-                      value={editCheckedQty}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                        setEditCheckedQty(isNaN(val) ? 0 : val);
-                      }}
-                      className="text-sm font-semibold"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Total items inspected so far (0 - {totalQuantity})
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="qc-passed-qty" className="text-xs font-semibold text-emerald-700">
-                      Passed Quantity
-                    </Label>
-                    <Input
-                      id="qc-passed-qty"
-                      type="number"
-                      min={0}
-                      max={totalQuantity}
-                      value={editPassedQty}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                        setEditPassedQty(isNaN(val) ? 0 : val);
-                      }}
-                      className="text-sm font-semibold text-emerald-800"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Approved garments with no defects
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="qc-defective-qty" className="text-xs font-semibold text-rose-700">
-                      Defective Quantity
-                    </Label>
-                    <Input
-                      id="qc-defective-qty"
-                      type="number"
-                      min={0}
-                      max={totalQuantity}
-                      value={editDefectiveQty}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                        setEditDefectiveQty(isNaN(val) ? 0 : val);
-                      }}
-                      className="text-sm font-semibold text-rose-800"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Faulty garments needing alteration/rework
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="qc-progress-note" className="text-xs text-slate-600">
-                    Inspection Note (optional)
-                  </Label>
-                  <Input
-                    id="qc-progress-note"
-                    placeholder="e.g., Inspected batch 1; fabric check passed, checking buttons..."
-                    value={progressNote}
-                    onChange={(e) => setProgressNote(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-
-                {/* Inline Validation & Guidance */}
-                {(() => {
-                  if (editCheckedQty < 0 || editPassedQty < 0 || editDefectiveQty < 0) {
-                    return (
-                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-700 flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        Quantities cannot be negative numbers.
-                      </div>
-                    );
-                  }
-                  if (editCheckedQty > totalQuantity) {
-                    return (
-                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-700 flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        Checked quantity ({editCheckedQty}) cannot exceed total order quantity ({totalQuantity}).
-                      </div>
-                    );
-                  }
-                  if (editPassedQty + editDefectiveQty !== editCheckedQty) {
-                    return (
-                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-700 flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        Passed ({editPassedQty}) + Defective ({editDefectiveQty}) must equal Checked quantity ({editCheckedQty}). Difference: {Math.abs(editCheckedQty - (editPassedQty + editDefectiveQty))}.
-                      </div>
-                    );
-                  }
-                  if (editCheckedQty < totalQuantity) {
-                    return (
-                      <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-700 flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        Inspection valid for {editCheckedQty} of {totalQuantity} items. Click &quot;Save Progress&quot; to update, or inspect all items to complete Quality Check.
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800 flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                      All {totalQuantity} items inspected! {editDefectiveQty === 0 ? "Zero defects — order will advance to Packed." : `${editDefectiveQty} defective items detected — order will remain in Quality Check.`}
-                    </div>
-                  );
-                })()}
-
-                {/* Action Buttons */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleUpdateProgress}
-                    disabled={
-                      isUpdatingProgress ||
-                      editPassedQty + editDefectiveQty !== editCheckedQty ||
-                      editCheckedQty < 0 ||
-                      editCheckedQty > totalQuantity
-                    }
-                    className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 gap-2 h-9 text-xs font-semibold"
-                  >
-                    {isUpdatingProgress ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Edit3 className="h-3.5 w-3.5" />
-                    )}
-                    {isUpdatingProgress ? "Saving Progress..." : "Save Progress"}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      if (editCheckedQty !== totalQuantity) {
-                        toast.error(`All ${totalQuantity} items must be inspected before completion (${editCheckedQty} checked).`);
-                        return;
-                      }
-                      if (editPassedQty + editDefectiveQty !== editCheckedQty) {
-                        toast.error("Passed and defective quantities must equal checked quantity.");
-                        return;
-                      }
-                      setShowCompleteDialog(true);
-                    }}
-                    disabled={
-                      isCompleting ||
-                      editCheckedQty !== totalQuantity ||
-                      editPassedQty + editDefectiveQty !== editCheckedQty
-                    }
-                    className={
-                      editDefectiveQty === 0
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-9 text-xs font-semibold shadow-sm"
-                        : "bg-rose-600 hover:bg-rose-700 text-white gap-2 h-9 text-xs font-semibold shadow-sm"
-                    }
-                  >
-                    {isCompleting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    {isCompleting
-                      ? "Completing QC..."
-                      : editCheckedQty === totalQuantity
-                      ? editDefectiveQty === 0
-                        ? "Complete Quality Check (Pass)"
-                        : "Complete Quality Check (Fail)"
-                      : `Complete Quality Check (${editCheckedQty}/${totalQuantity} checked)`}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {currentQCStatus === "passed" && (
-            <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm">
-              <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-emerald-900">
-                      Quality Check Completed & Passed
-                    </h4>
-                    <p className="text-xs text-emerald-700 mt-0.5">
-                      All {totalQuantity} items inspected and approved with zero defects. Completed at {formatDate(qcRecord?.completed_at || null, true)}.
-                    </p>
-                  </div>
-                </div>
-                <Link href={`/admin/packing-delivery/${order.id}`}>
-                  <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5 h-8 text-xs font-medium">
-                    <Truck className="h-3.5 w-3.5" />
-                    View Packing & Delivery
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          )}
-
-          {currentQCStatus === "failed" && (
-            <Card className="border-rose-200 bg-rose-50/50 shadow-sm">
-              <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
-                    <AlertCircle className="h-5 w-5 text-rose-600" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-rose-900">
-                      Quality Check Inspection Failed
-                    </h4>
-                    <p className="text-xs text-rose-700 mt-0.5">
-                      {defectiveQuantity} of {totalQuantity} items failed inspection. Order remains in Quality Check for administrative review and rework resolution.
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setEditRemarks(qcRecord?.remarks || "");
-                    setShowRemarksDialog(true);
-                  }}
-                  className="border-rose-300 text-rose-800 hover:bg-rose-100 gap-1.5 h-8 text-xs font-medium"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Update QC Notes
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Grid Layout: Left Side (Order Info & Remarks) + Right Side (Historical Overview) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left Column */}
-            <div className="space-y-6">
-              {/* Order Information Card */}
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-slate-600" />
-                    Order Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="flex justify-between border-b pb-2">
-                    <span className="text-muted-foreground">Order Number</span>
-                    <span className="font-semibold text-slate-900">{order.order_number}</span>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span className="text-muted-foreground">School</span>
-                    <span className="font-semibold text-slate-900">{order.schools?.name}</span>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span className="text-muted-foreground">Order Placed</span>
-                    <span className="text-slate-800">{formatDate(order.created_at)}</span>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span className="text-muted-foreground">Production Completed</span>
-                    <span className="text-slate-800">
-                      {formatDate(productionSummary?.completed_at || null)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span className="text-muted-foreground">QC Started</span>
-                    <span className="text-slate-800">{formatDate(qcRecord?.started_at || null, true)}</span>
-                  </div>
-                  <div className="flex justify-between pt-1">
-                    <span className="text-muted-foreground">Last Updated</span>
-                    <span className="text-slate-800">
-                      {formatDate(qcRecord?.updated_at || order.updated_at, true)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Remarks Card */}
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-indigo-600" />
-                      Quality Check Remarks
-                    </CardTitle>
-                    {qcRecord && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setEditRemarks(qcRecord.remarks || "");
-                          setShowRemarksDialog(true);
-                        }}
-                        className="h-7 text-xs text-indigo-600 hover:text-indigo-800 px-2"
-                      >
-                        Edit
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="text-sm">
-                  {qcRecord?.remarks ? (
-                    <p className="text-slate-800 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border text-xs leading-relaxed">
-                      {qcRecord.remarks}
-                    </p>
-                  ) : (
-                    <p className="text-muted-foreground text-xs italic">
-                      No remarks recorded yet. Add notes about inspected batches or defect details.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Column: Historical Quantity Overview */}
-            <div>
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-slate-600" />
-                    Historical Quantity Overview
-                  </CardTitle>
-                  <CardDescription>
-                    Snapshot from Requirement #{order.requirements?.requirement_number}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-slate-50 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground">Total Students</p>
-                      <p className="text-xl font-bold text-slate-900 mt-0.5">{totalStudents}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground">Total Items</p>
-                      <p className="text-xl font-bold text-slate-900 mt-0.5">{historicalTotalItems}</p>
-                    </div>
-                    {dynamicItems.map((item) => (
-                      <div
-                        key={item.itemName}
-                        className="p-3 bg-slate-50 rounded-lg border text-center"
-                      >
-                        <p
-                          className="text-xs text-muted-foreground font-medium truncate"
-                          title={formatItemName(item.itemName)}
-                        >
-                          {formatItemName(item.itemName)}
-                        </p>
-                        <p className="text-lg font-semibold text-slate-800 mt-0.5">
-                          {item.studentCount !== null
-                            ? `${item.studentCount} ${item.studentCount === 1 ? "student" : "students"}`
-                            : "—"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg flex items-start gap-2 text-xs text-amber-900">
-                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    <span>
-                      Quantities are locked historical records from order submission. Future student
-                      changes will not alter this inspection batch.
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* Tab 2: Quantity Breakdown */}
-        <TabsContent value="breakdown" className="mt-6">
-          <AdminOrderQuantityBreakdown
-            requirementItems={requirementItems}
-            orderNumber={order.order_number}
-            schoolName={order.schools?.name || "School"}
-          />
-        </TabsContent>
-
-        {/* Tab 3: QC Audit Trail */}
-        <TabsContent value="timeline" className="mt-6">
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <History className="h-5 w-5 text-indigo-600" />
-                Quality Check Audit Trail
-              </CardTitle>
-              <CardDescription>
-                Chronological log of inspection milestones, progress updates, and resolution events.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {qcHistory.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-sm">
-                  No quality check events recorded yet.
-                </div>
-              ) : (
-                <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-                  {qcHistory.map((item) => (
-                    <div key={item.id} className="relative group">
-                      <div className="absolute -left-[27px] top-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500 shadow-sm" />
-                      <div className="p-3.5 rounded-lg border bg-white shadow-xs space-y-1.5">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-sm text-slate-900">
-                              {formatQCStatusLabel(item.to_status)}
-                            </span>
-                            {item.from_status && item.from_status !== item.to_status && (
-                              <span className="text-xs text-muted-foreground">
-                                (from {formatQCStatusLabel(item.from_status)})
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {formatDate(item.created_at, true)}
-                          </span>
-                        </div>
-
-                        {item.note && (
-                          <p className="text-xs text-slate-700 bg-slate-50 p-2.5 rounded border">
-                            {item.note}
-                          </p>
-                        )}
-
-                        <div className="text-[11px] text-muted-foreground pt-0.5">
-                          Logged by:{" "}
-                          <span className="font-medium text-slate-800">
-                            {item.profiles?.full_name || "Admin"}
-                          </span>{" "}
-                          ({item.profiles?.role || "evenvibe_admin"})
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Dialog 1: Start Quality Check */}
-      <Dialog open={showStartDialog} onOpenChange={setShowStartDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Play className="h-5 w-5 text-emerald-600" />
-              Start Quality Check
-            </DialogTitle>
-            <DialogDescription>
-              This will transition Order #{order.order_number} to the <strong>Quality Check</strong> stage
-              and initiate the inspection process for {totalQuantity} items.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="startRemarks" className="text-xs">
-                Initial QC Remarks (optional)
-              </Label>
-              <Textarea
-                id="startRemarks"
-                placeholder="e.g., Batch received from stitching facility; starting fabric and seam inspection..."
-                value={startRemarks}
-                onChange={(e) => setStartRemarks(e.target.value)}
-                rows={3}
-                className="text-sm"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowStartDialog(false)}
-              disabled={isStarting}
-            >
-              Cancel
-            </Button>
+        {/* Primary Action */}
+        <div className="flex items-center gap-3">
+          {canStartQC && (
             <Button
               onClick={handleStartQC}
-              disabled={isStarting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+              disabled={isOperating}
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm"
             >
-              {isStarting ? "Starting..." : "Confirm & Start QC"}
+              {isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4 fill-white" />
+              )}
+              Start Quality Check
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
 
-      {/* Dialog 2: Record Inspection Progress */}
-      <Dialog open={showProgressDialog} onOpenChange={setShowProgressDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Edit3 className="h-5 w-5 text-indigo-600" />
-              Record Inspection Quantities
-            </DialogTitle>
-            <DialogDescription>
-              Update the inspected batch counts. Total items to inspect: <strong>{totalQuantity}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="checkedQty" className="text-xs font-semibold text-slate-700">
-                Total Checked Quantity
-              </Label>
-              <Input
-                id="checkedQty"
-                type="number"
-                min={0}
-                max={totalQuantity}
-                value={editCheckedQty}
-                onChange={(e) => setEditCheckedQty(parseInt(e.target.value) || 0)}
+          {isCompleted && (
+            <div className="flex items-center gap-2 text-evenvibe-primary dark:text-emerald-400 bg-evenvibe-light dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm font-medium">
+              <CheckCircle2 className="w-4 h-4" />
+              Ready for Delivery
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 4. SUMMARY CARDS */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+        {/* Card 1: Packed Quantity */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs uppercase font-semibold text-slate-500 tracking-wider">
+              Packed Quantity
+            </CardDescription>
+            <CardTitle className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
+              {qcData.totalPackedPieces}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Received from Packing
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: Checked Quantity */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs uppercase font-semibold text-slate-500 tracking-wider">
+              Checked Quantity
+            </CardDescription>
+            <CardTitle className="text-2xl font-bold text-evenvibe-primary dark:-evenvibe-primary mt-1">
+              {qcData.totalCheckedPieces}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Already inspected
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 3: Passed */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs uppercase font-semibold text-evenvibe-primary dark:text-emerald-400 tracking-wider">
+              Passed
+            </CardDescription>
+            <CardTitle className="text-2xl font-bold text-evenvibe-primary dark:text-emerald-400 mt-1">
+              {qcData.totalPassedPieces}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Approved for delivery
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 4: Defective */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs uppercase font-semibold text-status-error dark:text-rose-400 tracking-wider">
+              Defective
+            </CardDescription>
+            <CardTitle className="text-2xl font-bold text-status-error dark:text-rose-400 mt-1">
+              {qcData.totalDefectivePieces}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Rejected during QC
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 5: Pending */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 col-span-2 sm:col-span-1">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs uppercase font-semibold text-status-warning dark:text-amber-400 tracking-wider">
+              Pending
+            </CardDescription>
+            <CardTitle className="text-2xl font-bold text-status-warning dark:text-amber-400 mt-1">
+              {qcData.totalPendingPieces}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Remaining to inspect
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 17. SIMPLE PROGRESS SECTION */}
+      {qcData.hasOperationalPieces && (
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+          <CardHeader className="p-5 pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-sm uppercase font-bold tracking-wider text-slate-700 dark:text-slate-300">
+                Quality Check Progress
+              </CardTitle>
+              <span className="text-sm font-semibold text-evenvibe-primary dark:-evenvibe-primary">
+                {qcData.progressPercent}% Complete
+              </span>
+            </div>
+            <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden mt-2">
+              <div
+                className={`h-full transition-all duration-300 rounded-full ${
+                  qcData.progressPercent === 100 ? "bg-evenvibe-primary" : "bg-evenvibe-primary"
+                }`}
+                style={{ width: `${qcData.progressPercent}%` }}
               />
-              <p className="text-[11px] text-muted-foreground">
-                How many items have been physically checked so far (max: {totalQuantity})
-              </p>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="passedQty" className="text-xs font-semibold text-emerald-700">
-                  Passed Quantity
-                </Label>
-                <Input
-                  id="passedQty"
-                  type="number"
-                  min={0}
-                  max={editCheckedQty}
-                  value={editPassedQty}
-                  onChange={(e) => setEditPassedQty(parseInt(e.target.value) || 0)}
-                />
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs mt-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+              <div>
+                <span className="text-slate-500 dark:text-slate-400">Inspected Sizes: </span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {qcData.totalCompletedSizesCount} / {qcData.totalRequiredSizesCount}
+                </span>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="defectiveQty" className="text-xs font-semibold text-rose-700">
-                  Defective Quantity
-                </Label>
-                <Input
-                  id="defectiveQty"
-                  type="number"
-                  min={0}
-                  max={editCheckedQty}
-                  value={editDefectiveQty}
-                  onChange={(e) => setEditDefectiveQty(parseInt(e.target.value) || 0)}
-                />
+              <div>
+                <span className="text-slate-500 dark:text-slate-400">Checked: </span>
+                <span className="font-semibold text-evenvibe-primary dark:-evenvibe-primary">
+                  {qcData.totalCheckedPieces} / {qcData.totalPackedPieces}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 dark:text-slate-400">Passed: </span>
+                <span className="font-semibold text-evenvibe-primary dark:text-emerald-400">
+                  {qcData.totalPassedPieces}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 dark:text-slate-400">Defective: </span>
+                <span className="font-semibold text-status-error dark:text-rose-400">
+                  {qcData.totalDefectivePieces}
+                </span>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
 
-            {editPassedQty + editDefectiveQty !== editCheckedQty && (
-              <p className="text-xs text-rose-600 font-medium">
-                Passed and defective quantities must equal the checked quantity.
-              </p>
+      {/* 28. POST-COMPLETION BANNER (when QC is completed) */}
+      {isCompleted && (
+        <Card className="border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm">
+          <CardContent className="p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center text-evenvibe-primary dark:text-emerald-300 shrink-0">
+                <CheckCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-emerald-900 dark:text-emerald-100">
+                  ✓ Quality Check Completed
+                </h3>
+                <p className="text-sm text-evenvibe-deep dark:text-emerald-300">
+                  All {qcData.totalPackedPieces} packed pieces have been inspected. Passed:{" "}
+                  <strong>{qcData.totalPassedPieces}</strong>, Defective:{" "}
+                  <strong>{qcData.totalDefectivePieces}</strong>.
+                </p>
+              </div>
+            </div>
+
+            <Link href={`/admin/packing-delivery/${order.id}`}>
+              <Button className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm px-6">
+                <Truck className="w-4 h-4" />
+                Go to Packing & Delivery
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 5. QUALITY CHECK TABLE */}
+      <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+        <CardHeader className="p-5 md:p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-evenvibe-primary" />
+                Quality Check
+              </CardTitle>
+              <CardDescription className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Inspect the packed uniforms and enter the quantity that passed.
+              </CardDescription>
+            </div>
+
+            {hasUnsavedChanges && !isCompleted && (
+              <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs py-1">
+                Unsaved changes
+              </Badge>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="progressNote" className="text-xs">
-                Inspection Note (optional)
-              </Label>
-              <Input
-                id="progressNote"
-                placeholder="e.g. Inspected 50 shirts; 2 had missing buttons"
-                value={progressNote}
-                onChange={(e) => setProgressNote(e.target.value)}
-              />
-            </div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowProgressDialog(false)}
-              disabled={isUpdatingProgress}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpdateProgress}
-              disabled={
-                isUpdatingProgress ||
-                editPassedQty + editDefectiveQty !== editCheckedQty ||
-                editCheckedQty < 0 ||
-                editCheckedQty > totalQuantity
-              }
-              className="bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              {isUpdatingProgress ? "Saving..." : "Save Inspection"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </CardHeader>
 
-      {/* Dialog 3: Complete Quality Check */}
-      <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-indigo-600" />
-              Complete Quality Check
-            </DialogTitle>
-            <DialogDescription>
-              Finalize quality inspection for Order #{order.order_number}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="p-3 bg-slate-50 border rounded-lg space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span>Total Order Items:</span>
-                <span className="font-semibold">{qcRecord?.total_quantity}</span>
+        <CardContent className="p-0">
+          {/* Zero-Output Rule Empty State */}
+          {!qcData.hasOperationalPieces ? (
+            <div className="p-12 text-center space-y-3">
+              <Package className="w-12 h-12 text-slate-400 mx-auto" />
+              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                No pieces are available for Quality Check.
+              </h3>
+              <p className="text-sm text-slate-500 max-w-md mx-auto">
+                Quality Check input comes strictly from the final Packed Output of the manufacturing process.
+                Please ensure Stage 8 Packing has been recorded and completed.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {qcData.groups.map((group) => (
+                <div key={group.groupKey} className="p-5 md:p-6 space-y-4">
+                  {/* Item & Style Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80 gap-2">
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                        {group.itemName}
+                      </h4>
+                      <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {group.styleName && (
+                          <span>
+                            Style: <strong className="text-slate-700 dark:text-slate-300">{group.styleName}</strong>
+                          </span>
+                        )}
+                        {group.color && (
+                          <span>
+                            Color: <strong className="text-slate-700 dark:text-slate-300">{group.color}</strong>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 rounded-md border border-slate-200/60 dark:border-slate-700/60">
+                      <span>Packed: <strong>{group.totalPacked}</strong></span>
+                      <span className="text-slate-300 dark:text-slate-600">|</span>
+                      <span>Passed: <strong className="text-evenvibe-primary">{group.totalPassed}</strong></span>
+                      <span className="text-slate-300 dark:text-slate-600">|</span>
+                      <span>Defective: <strong className="text-status-error">{group.totalDefective}</strong></span>
+                      <span className="text-slate-300 dark:text-slate-600">|</span>
+                      <span>Pending: <strong className="text-status-warning">{group.totalPending}</strong></span>
+                    </div>
+                  </div>
+
+                  {/* Size Rows Table: Desktop View */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          <th className="py-2.5 px-3 w-28">Size</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Packed</th>
+                          <th className="py-2.5 px-3 w-36 text-center">Passed</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Defective</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Status</th>
+                          <th className="py-2.5 px-3">Remarks (Optional)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                        {group.sizeRows.map((row) => {
+                          const rawVal =
+                            livePassedInputs[row.rowKey] !== undefined
+                              ? livePassedInputs[row.rowKey]
+                              : row.passedQuantity !== null
+                              ? String(row.passedQuantity)
+                              : "";
+
+                          return (
+                            <tr
+                              key={row.rowKey}
+                              className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors ${
+                                !row.isValid ? "bg-rose-50/30 dark:bg-rose-950/10" : ""
+                              }`}
+                            >
+                              {/* Size */}
+                              <td className="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                                Size {row.size}
+                              </td>
+
+                              {/* Packed: Read Only */}
+                              <td className="py-3 px-3 text-center font-medium text-slate-600 dark:text-slate-300">
+                                <span className="bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded text-xs font-semibold">
+                                  {row.packedQuantity}
+                                </span>
+                              </td>
+
+                              {/* Passed: Admin Input */}
+                              <td className="py-3 px-3 text-center">
+                                <div className="max-w-[110px] mx-auto space-y-1">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={row.packedQuantity}
+                                    value={rawVal}
+                                    placeholder="Enter"
+                                    disabled={isOperating || isCompleted}
+                                    onChange={(e) => handlePassedChange(row.rowKey, e.target.value)}
+                                    className={`h-9 text-center font-bold text-sm ${
+                                      !row.isValid
+                                        ? "border-status-error focus-visible:ring-status-error bg-rose-50/50"
+                                        : row.passedQuantity !== null
+                                        ? "border-emerald-500/80 bg-emerald-50/20"
+                                        : ""
+                                    }`}
+                                  />
+                                  {row.errorMessage && (
+                                    <p className="text-[11px] text-status-error font-medium leading-tight">
+                                      {row.errorMessage}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Defective: Automatic Read Only */}
+                              <td className="py-3 px-3 text-center font-medium">
+                                <span
+                                  className={`px-2.5 py-1 rounded text-xs font-bold ${
+                                    row.passedQuantity === null
+                                      ? "text-slate-400 bg-slate-50 dark:bg-slate-800/40"
+                                      : row.defectiveQuantity > 0
+                                      ? "text-status-error bg-rose-50 dark:bg-rose-950/40"
+                                      : "text-slate-600 bg-slate-100 dark:bg-slate-800"
+                                  }`}
+                                >
+                                  {row.passedQuantity === null ? "—" : row.defectiveQuantity}
+                                </span>
+                              </td>
+
+                              {/* Status Badge */}
+                              <td className="py-3 px-3 text-center">
+                                {renderRowStatusBadge(row.status)}
+                              </td>
+
+                              {/* Optional Remarks */}
+                              <td className="py-3 px-3">
+                                <Input
+                                  type="text"
+                                  placeholder="e.g. stitching flaw, loose button"
+                                  value={
+                                    liveRemarksInputs[row.rowKey] !== undefined
+                                      ? liveRemarksInputs[row.rowKey]
+                                      : row.remarks
+                                  }
+                                  disabled={isOperating || isCompleted}
+                                  onChange={(e) => handleRemarksChange(row.rowKey, e.target.value)}
+                                  className="h-8 text-xs max-w-sm"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Size Rows: Mobile Cards View */}
+                  <div className="md:hidden space-y-3 p-3 bg-slate-50/50 dark:bg-slate-800/30">
+                    {group.sizeRows.map((row) => {
+                      const rawVal =
+                        livePassedInputs[row.rowKey] !== undefined
+                          ? livePassedInputs[row.rowKey]
+                          : row.passedQuantity !== null
+                          ? String(row.passedQuantity)
+                          : "";
+
+                      return (
+                        <MobileCard
+                          key={`mob-qc-${row.rowKey}`}
+                          className={`border ${
+                            !row.isValid
+                              ? "border-rose-400 bg-rose-50/30 dark:bg-rose-950/20"
+                              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                            <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                              Size: {row.size}
+                            </span>
+                            {renderRowStatusBadge(row.status)}
+                          </div>
+
+                          <MobileCardField
+                            label="Packed Quantity (From Packing)"
+                            value={
+                              <span className="font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-xs">
+                                {row.packedQuantity} pieces
+                              </span>
+                            }
+                          />
+
+                          <MobileCardField
+                            label="Passed Quantity (Admin Entered)"
+                            value={
+                              <div className="w-full pt-0.5">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={row.packedQuantity}
+                                  value={rawVal}
+                                  placeholder="Enter passed qty"
+                                  disabled={isOperating || isCompleted}
+                                  onChange={(e) => handlePassedChange(row.rowKey, e.target.value)}
+                                  className={`h-9 w-full font-bold text-xs ${
+                                    !row.isValid
+                                      ? "border-status-error focus-visible:ring-status-error bg-rose-50/50"
+                                      : row.passedQuantity !== null
+                                      ? "border-emerald-500/80 bg-emerald-50/20"
+                                      : ""
+                                  }`}
+                                />
+                                {row.errorMessage && (
+                                  <p className="text-[11px] text-status-error font-medium leading-tight mt-1">
+                                    {row.errorMessage}
+                                  </p>
+                                )}
+                              </div>
+                            }
+                          />
+
+                          <MobileCardField
+                            label="Defective Quantity (Calculated)"
+                            value={
+                              <span
+                                className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                  row.passedQuantity === null
+                                    ? "text-slate-400 bg-slate-50 dark:bg-slate-800/40"
+                                    : row.defectiveQuantity > 0
+                                    ? "text-status-error bg-rose-50 dark:bg-rose-950/40"
+                                    : "text-slate-600 bg-slate-100 dark:bg-slate-800"
+                                }`}
+                              >
+                                {row.passedQuantity === null ? "—" : `${row.defectiveQuantity} pieces`}
+                              </span>
+                            }
+                          />
+
+                          <MobileCardField
+                            label="Remarks (Optional)"
+                            value={
+                              <Input
+                                type="text"
+                                placeholder="e.g. stitching flaw, loose button"
+                                value={
+                                  liveRemarksInputs[row.rowKey] !== undefined
+                                    ? liveRemarksInputs[row.rowKey]
+                                    : row.remarks
+                                }
+                                disabled={isOperating || isCompleted}
+                                onChange={(e) => handleRemarksChange(row.rowKey, e.target.value)}
+                                className="h-9 text-xs w-full"
+                              />
+                            }
+                          />
+                        </MobileCard>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Action Footer */}
+          {qcData.hasOperationalPieces && !isCompleted && (
+            <div className="p-5 md:p-6 bg-slate-50/70 dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-xs text-slate-500">
+                <p>
+                  • <strong>Passed Quantity</strong> is entered by Admin. 0 is valid.
+                </p>
+                <p>
+                  • <strong>Defective Quantity</strong> is calculated automatically: <em>Packed - Passed</em>.
+                </p>
               </div>
-              <div className="flex justify-between">
-                <span>Total Inspected:</span>
-                <span className="font-semibold">{qcRecord?.checked_quantity}</span>
-              </div>
-              <div className="flex justify-between text-emerald-700">
-                <span>Passed Items:</span>
-                <span className="font-semibold">{qcRecord?.passed_quantity}</span>
-              </div>
-              <div className="flex justify-between text-rose-700">
-                <span>Defective Items:</span>
-                <span className="font-semibold">{qcRecord?.defective_quantity}</span>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  onClick={handleSaveProgress}
+                  disabled={isOperating}
+                  className="gap-2 w-full sm:w-auto"
+                >
+                  {isSavingProgress ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {isSavingProgress ? "Saving..." : "Save QC Progress"}
+                </Button>
+
+                <Button
+                  onClick={handleCompleteQC}
+                  disabled={isOperating || !qcData.canComplete}
+                  className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 w-full sm:w-auto shadow-sm"
+                >
+                  {isCompletingQC ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCheck className="w-4 h-4" />
+                  )}
+                  {isCompletingQC ? "Completing..." : "Complete Quality Check"}
+                </Button>
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
 
-            {qcRecord?.defective_quantity === 0 ? (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
-                <strong>Quality Check Passed:</strong> All items passed inspection with zero defects.
-                Submitting will advance this order to the <strong>Packed</strong> stage.
-              </div>
+      {/* 19. AUDIT TRAIL: Simple Collapsible "QC History" */}
+      <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+        <button
+          type="button"
+          onClick={() => setShowHistory((prev) => !prev)}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-slate-500" />
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              QC History
+            </span>
+            <span className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+              {qcHistory.length}
+            </span>
+          </div>
+
+          <div className="text-slate-400">
+            {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+        </button>
+
+        {showHistory && (
+          <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-800">
+            {qcHistory.length === 0 ? (
+              <p className="text-xs text-slate-500 py-3">No history events recorded yet.</p>
             ) : (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
-                <strong>Quality Check Failed:</strong> {qcRecord?.defective_quantity} defective items
-                detected. Order will remain in Quality Check status for administrative review.
+              <div className="space-y-3 pt-3">
+                {qcHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between text-xs py-2 border-b border-slate-50 dark:border-slate-800/50 last:border-0 gap-1"
+                  >
+                    <div>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                        {item.to_status === "completed"
+                          ? "Quality Check Completed"
+                          : item.to_status === "in_progress"
+                          ? "Quality Check Started / In Progress"
+                          : `Status: ${item.to_status}`}
+                      </span>
+                      {item.note && (
+                        <p className="text-slate-500 dark:text-slate-400 mt-0.5">{item.note}</p>
+                      )}
+                    </div>
+                    <div className="text-slate-400 shrink-0 text-[11px]">
+                      {new Date(item.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="completionNote" className="text-xs">
-                Final Resolution Note (optional)
-              </Label>
-              <Textarea
-                id="completionNote"
-                placeholder="e.g. All garments approved, moving to packing team."
-                value={completionNote}
-                onChange={(e) => setCompletionNote(e.target.value)}
-                rows={2}
-                className="text-sm"
-              />
-            </div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowCompleteDialog(false)}
-              disabled={isCompleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCompleteQC}
-              disabled={isCompleting}
-              className={
-                qcRecord?.defective_quantity === 0
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  : "bg-rose-600 hover:bg-rose-700 text-white"
-              }
-            >
-              {isCompleting
-                ? "Completing..."
-                : qcRecord?.defective_quantity === 0
-                ? "Confirm & Pass QC"
-                : "Confirm & Fail QC"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog 4: Edit Remarks */}
-      <Dialog open={showRemarksDialog} onOpenChange={setShowRemarksDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-indigo-600" />
-              Update QC Remarks
-            </DialogTitle>
-            <DialogDescription>
-              Add or modify notes for this inspection batch.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="editRemarksText" className="text-xs">
-                Remarks
-              </Label>
-              <Textarea
-                id="editRemarksText"
-                placeholder="Enter quality notes, fabric batch feedback, etc."
-                value={editRemarks}
-                onChange={(e) => setEditRemarks(e.target.value)}
-                rows={4}
-                className="text-sm"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowRemarksDialog(false)}
-              disabled={isUpdatingRemarks}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveRemarks}
-              disabled={isUpdatingRemarks}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              {isUpdatingRemarks ? "Saving..." : "Save Remarks"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+      </div>
     </div>
   );
 }

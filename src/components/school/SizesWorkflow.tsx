@@ -1,5 +1,5 @@
 "use client";
-import { ConfigItem } from "@/app/(school)/school/sizes/actions";
+import { ConfigItem, ActiveStyleItem } from "@/app/(school)/school/sizes/actions";
 import { STANDARD_CLASSES } from "@/lib/constants/classes";
 
 import { useState, useMemo } from "react";
@@ -16,10 +16,19 @@ import { PendingSizesTable } from "./PendingSizesTable";
 interface SizesWorkflowProps {
   students: StudentWithSize[];
   allConfigs: { gender: string; classes: string[]; items: ConfigItem[] }[];
+  activeStyles?: ActiveStyleItem[];
 }
 
-export function SizesWorkflow({ students, allConfigs }: SizesWorkflowProps) {
-  useRealtimeRefresh({ table: "students" });
+export function SizesWorkflow({ students, allConfigs, activeStyles = [] }: SizesWorkflowProps) {
+  useRealtimeRefresh({
+    tables: [
+      { table: "students" },
+      { table: "student_uniform_sizes" },
+      { table: "student_uniform_size_history" },
+      { table: "uniform_styles" },
+      { table: "uniform_style_classes" },
+    ],
+  });
 
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
@@ -191,17 +200,17 @@ export function SizesWorkflow({ students, allConfigs }: SizesWorkflowProps) {
               <p className="text-2xl font-bold text-slate-900">{total}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Completed</p>
-              <p className="text-2xl font-bold text-emerald-600">{completed}</p>
+              <p className="text-sm font-medium text-evenvibe-primary flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Completed</p>
+              <p className="text-2xl font-bold text-evenvibe-primary">{completed}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium text-amber-600 flex items-center gap-1"><Clock className="w-4 h-4" /> Pending</p>
-              <p className="text-2xl font-bold text-amber-600">{pending}</p>
+              <p className="text-sm font-medium text-status-warning flex items-center gap-1"><Clock className="w-4 h-4" /> Pending</p>
+              <p className="text-2xl font-bold text-status-warning">{pending}</p>
             </div>
             <div className="col-span-2 md:col-span-1 space-y-2 flex flex-col justify-center">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-slate-500">Progress</p>
-                <p className="text-sm font-bold text-indigo-600">{progressPercent}%</p>
+                <p className="text-sm font-bold text-evenvibe-primary">{progressPercent}%</p>
               </div>
               <Progress value={progressPercent} className="h-2" />
             </div>
@@ -215,10 +224,10 @@ export function SizesWorkflow({ students, allConfigs }: SizesWorkflowProps) {
           <TabsTrigger value="pending">Pending Collection</TabsTrigger>
         </TabsList>
         <TabsContent value="all" className="space-y-4">
-          <SizeCollectionTable students={filteredStudents} configurations={configurations} />
+          <SizeCollectionTable students={filteredStudents} configurations={configurations} activeStyles={activeStyles} />
         </TabsContent>
         <TabsContent value="pending" className="space-y-4">
-          <PendingSizesTable students={filteredStudents} configurations={configurations} />
+          <PendingSizesTable students={filteredStudents} configurations={configurations} activeStyles={activeStyles} />
         </TabsContent>
       </Tabs>
     </div>

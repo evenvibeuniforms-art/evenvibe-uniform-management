@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import AdminPackingDeliveryListView, { PackingDeliveryRow } from "./views/AdminPackingDeliveryListView";
 
 export const metadata = {
-  title: "Packing & Delivery Management | EvenVibe Admin",
+  title: "Delivery Management | EvenVibe Admin",
 };
 
 interface RawOrderRow {

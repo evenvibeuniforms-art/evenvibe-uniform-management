@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Search, Loader2, UserPlus, CheckCircle2, AlertCircle } from "lucide-react";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 
 interface AddStudentsToOrderDialogProps {
   isOpen: boolean;
@@ -137,7 +138,7 @@ export function AddStudentsToOrderDialog({
         <DialogContent className="w-[calc(100%-2rem)] sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden shadow-xl border-slate-200">
           <DialogHeader className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0">
+              <div className="p-2 rounded-lg bg-evenvibe-light text-evenvibe-deep border border-emerald-100 shrink-0">
                 <UserPlus className="h-5 w-5" />
               </div>
               <div>
@@ -224,7 +225,8 @@ export function AddStudentsToOrderDialog({
               </div>
             ) : (
               <div className="border border-slate-200 rounded-lg overflow-hidden my-1 bg-white">
-                <div className="overflow-x-auto">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm text-left border-collapse">
                     <thead className="bg-slate-50 text-slate-700 border-b border-slate-200 text-xs font-semibold">
                       <tr>
@@ -279,7 +281,7 @@ export function AddStudentsToOrderDialog({
                             <td className="py-2.5 px-3 text-right whitespace-nowrap">
                               <Badge
                                 variant="outline"
-                                className="bg-emerald-50 text-emerald-700 border-emerald-200 inline-flex items-center gap-1 font-normal text-xs px-2 py-0.5"
+                                className="bg-evenvibe-light text-evenvibe-deep border-emerald-200 inline-flex items-center gap-1 font-normal text-xs px-2 py-0.5"
                               >
                                 <CheckCircle2 className="h-3 w-3" />
                                 Complete
@@ -291,6 +293,56 @@ export function AddStudentsToOrderDialog({
                     </tbody>
                   </table>
                 </div>
+
+                {/* Mobile Vertical Cards View */}
+                <div className="md:hidden space-y-3 p-2 bg-slate-50/50">
+                  <div className="flex items-center justify-between px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs">
+                    <span className="font-medium text-slate-700">Select All Visible</span>
+                    <Checkbox
+                      checked={isAllVisibleSelected}
+                      onCheckedChange={handleToggleSelectAll}
+                      aria-label="Select all visible"
+                    />
+                  </div>
+                  {filteredStudents.map((student) => {
+                    const isSelected = selectedStudentIds.includes(student.id);
+                    return (
+                      <MobileCard
+                        key={student.id}
+                        onClick={() => handleToggleSelect(student.id)}
+                        className={`cursor-pointer ${isSelected ? "border-emerald-500 ring-1 ring-evenvibe-primary bg-emerald-50/30" : ""}`}
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
+                          <span className="text-xs font-semibold text-slate-600">Select Student</span>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => handleToggleSelect(student.id)}
+                              aria-label={`Select ${student.student_name}`}
+                            />
+                          </div>
+                        </div>
+                        <MobileCardField label="Student Name" value={student.student_name} />
+                        <MobileCardField label="Admission #" value={<span className="font-mono text-xs">{student.admission_number}</span>} />
+                        <MobileCardField label="Class" value={student.class_name} />
+                        <MobileCardField label="Section" value={student.section || "—"} />
+                        <MobileCardField label="Gender" value={<span className="capitalize">{student.gender}</span>} />
+                        <MobileCardField
+                          label="Status"
+                          value={
+                            <Badge
+                              variant="outline"
+                              className="bg-evenvibe-light text-evenvibe-deep border-emerald-200 inline-flex items-center gap-1 font-normal text-xs px-2 py-0.5"
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              Complete
+                            </Badge>
+                          }
+                        />
+                      </MobileCard>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -301,7 +353,7 @@ export function AddStudentsToOrderDialog({
               {selectedStudentIds.length === 0 ? (
                 <span className="text-slate-400">0 students selected</span>
               ) : (
-                <span className="text-emerald-700 font-semibold">
+                <span className="text-evenvibe-deep font-semibold">
                   {selectedStudentIds.length} student
                   {selectedStudentIds.length === 1 ? "" : "s"} selected
                 </span>
@@ -316,7 +368,7 @@ export function AddStudentsToOrderDialog({
                 size="sm"
                 onClick={() => setShowConfirm(true)}
                 disabled={selectedStudentIds.length === 0 || isSubmitting}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white shadow-sm"
               >
                 Add Students {selectedStudentIds.length > 0 ? `(${selectedStudentIds.length})` : ""}
               </Button>
@@ -352,7 +404,7 @@ export function AddStudentsToOrderDialog({
               size="sm"
               onClick={handleConfirmAdd}
               disabled={isSubmitting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white shadow-sm"
             >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isSubmitting ? "Adding Students..." : "Confirm & Add"}

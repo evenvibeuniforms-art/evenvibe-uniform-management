@@ -52,6 +52,7 @@ export interface SchoolPerformanceRow {
   schoolId: string;
   schoolName: string;
   schoolCode: string;
+  city: string;
   totalStudents: number;
   orderCount: number;
   totalItems: number;
@@ -77,6 +78,7 @@ export interface UniformSizeReportItem {
   className: string;
   section: string;
   gender: string;
+  styleName?: string;
   itemName: string;
   size: string;
   quantity: number;

@@ -3,6 +3,7 @@
 import { requireSchoolAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { createAdminNotification } from "@/lib/notifications/adminNotifications";
 import {
   createTcStudentSchema,
   updateTcStudentSchema,
@@ -102,6 +103,17 @@ export async function getTcStudentsList(
         .or(`student_name.ilike.%${s}%,admission_number.ilike.%${s}%`);
 
       matchingStudentIds = (matchedStudents || []).map((st) => st.id);
+
+      if (matchingStudentIds.length === 0) {
+        return {
+          success: true,
+          tcStudents: [],
+          totalCount: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+        };
+      }
     }
 
     // Handle class filter
@@ -135,7 +147,7 @@ export async function getTcStudentsList(
         id,
         school_id,
         student_id,
-        tc_number,
+        tc_date,
         created_at,
         updated_at,
         students!inner (
@@ -157,15 +169,8 @@ export async function getTcStudentsList(
     }
 
     // Apply search condition
-    if (params.search && params.search.trim()) {
-      const s = params.search.trim();
-      if (matchingStudentIds && matchingStudentIds.length > 0) {
-        query = query.or(
-          `tc_number.ilike.%${s}%,student_id.in.(${matchingStudentIds.join(",")})`
-        );
-      } else {
-        query = query.ilike("tc_number", `%${s}%`);
-      }
+    if (matchingStudentIds !== null) {
+      query = query.in("student_id", matchingStudentIds);
     }
 
     const { data, count, error } = await query
@@ -197,7 +202,7 @@ export async function getTcStudentsList(
         id: row.id,
         school_id: row.school_id,
         student_id: row.student_id,
-        tc_number: row.tc_number,
+        tc_date: row.tc_date || null,
         created_at: row.created_at,
         updated_at: row.updated_at,
         student: {
@@ -321,7 +326,7 @@ export async function getTcStudentById(
         id,
         school_id,
         student_id,
-        tc_number,
+        tc_date,
         created_at,
         updated_at,
         students (
@@ -353,7 +358,7 @@ export async function getTcStudentById(
         id: data.id,
         school_id: data.school_id,
         student_id: data.student_id,
-        tc_number: data.tc_number,
+        tc_date: data.tc_date || null,
         created_at: data.created_at,
         updated_at: data.updated_at,
         student: {
@@ -373,7 +378,7 @@ export async function getTcStudentById(
 }
 
 /**
- * Create a new TC student record.
+ * Create a new TC student record with mandatory TC Date.
  */
 export async function createTcStudent(
   data: CreateTcStudentInput
@@ -381,7 +386,7 @@ export async function createTcStudent(
   try {
     const profile = await requireSchoolAdmin();
     const validated = createTcStudentSchema.parse(data);
-    const tc_number = validated.tc_number.trim();
+    const tc_date = validated.tc_date.trim();
     const student_id = validated.student_id;
 
     const supabase = await createClient();
@@ -416,49 +421,20 @@ export async function createTcStudent(
       };
     }
 
-    // 3. Check duplicate: TC number already exists in this school
-    const { data: existingTcNum } = await supabase
-      .from("tc_students")
-      .select("id")
-      .eq("school_id", profile.school_id)
-      .eq("tc_number", tc_number)
-      .maybeSingle();
-
-    if (existingTcNum) {
-      return {
-        success: false,
-        error: "TC number already exists in this school.",
-      };
-    }
-
-    // 4. Insert into tc_students
+    // 3. Insert into tc_students with mandatory tc_date
     const { error: insertError } = await supabase.from("tc_students").insert({
       school_id: profile.school_id,
       student_id: student_id,
-      tc_number: tc_number,
+      tc_date: tc_date,
     });
 
     if (insertError) {
       console.error("Error creating TC student record:", insertError);
       if (insertError.code === "23505") {
-        if (
-          insertError.message?.includes("tc_students_school_student_unique") ||
-          insertError.details?.includes("student_id")
-        ) {
-          return {
-            success: false,
-            error: "TC record already exists for this student.",
-          };
-        }
-        if (
-          insertError.message?.includes("tc_students_school_tc_number_unique") ||
-          insertError.details?.includes("tc_number")
-        ) {
-          return {
-            success: false,
-            error: "TC number already exists in this school.",
-          };
-        }
+        return {
+          success: false,
+          error: "TC record already exists for this student.",
+        };
       }
       return {
         success: false,
@@ -466,7 +442,42 @@ export async function createTcStudent(
       };
     }
 
+    // Fetch school name for notification message
+    const { data: school } = await supabase
+      .from("schools")
+      .select("name")
+      .eq("id", profile.school_id)
+      .single();
+    const schoolName = school?.name || "School";
+
+    // 4. Create automatic Admin notification
+    const nowIso = new Date().toISOString();
+    try {
+      await createAdminNotification({
+        eventType: "NEW_TC_STUDENT",
+        title: "New TC Student Added",
+        message: `A new TC student has been added by ${schoolName}.`,
+        link: "/admin/tc-students",
+        schoolId: profile.school_id,
+        entityId: student_id,
+        idempotencyKey: `NEW_TC_STUDENT_${student_id}_${profile.school_id}`,
+        notificationType: "tc_student",
+        metadata: {
+          school_id: profile.school_id,
+          school_name: schoolName,
+          student_id: student.id,
+          student_name: student.student_name,
+          admission_number: student.admission_number,
+          event_type: "NEW_TC_STUDENT",
+          created_at: nowIso,
+        },
+      });
+    } catch (notifErr) {
+      console.warn("Failed to create admin notification for TC student:", notifErr);
+    }
+
     revalidatePath("/school/tc-students");
+    revalidatePath("/admin/tc-students");
     return { success: true };
   } catch (err: unknown) {
     console.error("Exception in createTcStudent:", err);
@@ -481,7 +492,7 @@ export async function createTcStudent(
 }
 
 /**
- * Update TC student record (e.g. modify TC number).
+ * Update TC student record (e.g. modify TC Date).
  */
 export async function updateTcStudent(
   id: string,
@@ -490,7 +501,7 @@ export async function updateTcStudent(
   try {
     const profile = await requireSchoolAdmin();
     const validated = updateTcStudentSchema.parse(data);
-    const tc_number = validated.tc_number.trim();
+    const tc_date = validated.tc_date.trim();
 
     const supabase = await createClient();
 
@@ -509,26 +520,10 @@ export async function updateTcStudent(
       };
     }
 
-    // Check duplicate: another record in this school has this TC number
-    const { data: existingTcNum } = await supabase
-      .from("tc_students")
-      .select("id")
-      .eq("school_id", profile.school_id)
-      .eq("tc_number", tc_number)
-      .neq("id", id)
-      .maybeSingle();
-
-    if (existingTcNum) {
-      return {
-        success: false,
-        error: "TC number already exists in this school.",
-      };
-    }
-
     const { error: updateError } = await supabase
       .from("tc_students")
       .update({
-        tc_number: tc_number,
+        tc_date: tc_date,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
@@ -536,12 +531,6 @@ export async function updateTcStudent(
 
     if (updateError) {
       console.error("Error updating TC student record:", updateError);
-      if (updateError.code === "23505") {
-        return {
-          success: false,
-          error: "TC number already exists in this school.",
-        };
-      }
       return {
         success: false,
         error: "Failed to update TC student record. Please try again.",
@@ -549,6 +538,7 @@ export async function updateTcStudent(
     }
 
     revalidatePath("/school/tc-students");
+    revalidatePath("/admin/tc-students");
     return { success: true };
   } catch (err: unknown) {
     console.error("Exception in updateTcStudent:", err);
@@ -588,6 +578,7 @@ export async function deleteTcStudent(
     }
 
     revalidatePath("/school/tc-students");
+    revalidatePath("/admin/tc-students");
     return { success: true };
   } catch (err: unknown) {
     console.error("Exception in deleteTcStudent:", err);

@@ -10,12 +10,12 @@ const STAGE_COLORS: Record<string, string> = {
   submitted: "bg-slate-400",
   under_review: "bg-amber-400",
   confirmed: "bg-blue-400",
-  production: "bg-indigo-500",
-  quality_check: "bg-purple-500",
-  packed: "bg-teal-500",
-  dispatched: "bg-cyan-500",
-  in_transit: "bg-sky-500",
-  delivered: "bg-emerald-500",
+  production: "bg-evenvibe-primary",
+  quality_check: "bg-evenvibe-primary",
+  packed: "bg-evenvibe-primary",
+  dispatched: "bg-status-info",
+  in_transit: "bg-status-info",
+  delivered: "bg-status-success",
   cancelled: "bg-rose-400",
 };
 

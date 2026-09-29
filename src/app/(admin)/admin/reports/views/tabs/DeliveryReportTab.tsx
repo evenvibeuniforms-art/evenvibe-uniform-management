@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Truck } from "lucide-react";
 import { DeliveryReportRow, PaginatedResult, GlobalReportFilters } from "../../types";
 import { ExportReportButton } from "../components/ExportReportButton";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 
 interface DeliveryReportTabProps {
   report: PaginatedResult<DeliveryReportRow>;
@@ -25,9 +26,9 @@ const formatDate = (dateStr: string | null) => {
 const getDeliveryBadge = (status: string) => {
   switch (status) {
     case "packed":
-      return "bg-teal-100 text-teal-800 border-teal-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "dispatched":
-      return "bg-purple-100 text-purple-800 border-purple-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "in_transit":
       return "bg-sky-100 text-sky-800 border-sky-200";
     case "delivered":
@@ -42,10 +43,10 @@ export function DeliveryReportTab({ report, filters, onPageChange }: DeliveryRep
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
-      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
+      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-            <Truck className="h-4 w-4 text-emerald-600" />
+            <Truck className="h-4 w-4 text-evenvibe-primary" />
             Dispatch & Delivery Logistics Report ({totalCount})
           </CardTitle>
           <CardDescription className="text-xs mt-0.5">
@@ -54,7 +55,9 @@ export function DeliveryReportTab({ report, filters, onPageChange }: DeliveryRep
         </div>
         <ExportReportButton tabName="delivery" tabLabel="Delivery Report" filters={filters} />
       </CardHeader>
-      <div className="overflow-x-auto">
+
+      {/* Desktop Table View (>= 768px) */}
+      <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
@@ -99,10 +102,39 @@ export function DeliveryReportTab({ report, filters, onPageChange }: DeliveryRep
         </Table>
       </div>
 
+      {/* Mobile Card View (< 768px) */}
+      <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+        {data.length === 0 ? (
+          <div className="text-center py-8 text-xs text-slate-500 bg-white rounded-lg border border-slate-200">
+            No delivery records found matching the selected filters.
+          </div>
+        ) : (
+          data.map((d) => (
+            <MobileCard key={d.orderId}>
+              <MobileCardField label="Order Number" value={<span className="font-mono font-semibold">{d.orderNumber}</span>} />
+              <MobileCardField label="School" value={d.schoolName} />
+              <MobileCardField label="Courier" value={d.courierName || "—"} />
+              <MobileCardField label="Tracking Number" value={<span className="font-mono">{d.trackingNumber || "—"}</span>} />
+              <MobileCardField label="Estimated Delivery" value={formatDate(d.estimatedDelivery)} />
+              <MobileCardField label="Shipped Date" value={formatDate(d.shippedAt)} />
+              <MobileCardField label="Delivered Date" value={formatDate(d.deliveredAt)} />
+              <MobileCardField
+                label="Delivery Status"
+                value={
+                  <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${getDeliveryBadge(d.status)}`}>
+                    {d.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </Badge>
+                }
+              />
+            </MobileCard>
+          ))
+        )}
+      </div>
+
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
-          <p className="text-xs text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3 border-t bg-slate-50/50">
+          <p className="text-xs text-muted-foreground text-center sm:text-left">
             Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} records
           </p>
           <div className="flex items-center gap-1">

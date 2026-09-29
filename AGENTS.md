@@ -7,3 +7,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+
+<!-- BEGIN:evenvibe-rules -->
+
+## School UUID Masking Rule
+Whenever a School UUID (or school_id) exists in the UI, NEVER display the raw UUID string to the user. Display the corresponding 'SCHOOL NAME' instead.
+
+<!-- END:evenvibe-rules -->

@@ -68,7 +68,7 @@ export default async function RequirementDetailsPage({ params }: { params: Promi
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Requirement Details</h1>
           <div className="flex items-center gap-3 mt-1">
             <span className="text-slate-500 font-medium">{requirement.requirement_number}</span>
-            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 uppercase">
+            <Badge variant="outline" className="bg-evenvibe-light text-evenvibe-deep border-emerald-200 uppercase">
               {requirement.status}
             </Badge>
           </div>
@@ -95,7 +95,7 @@ export default async function RequirementDetailsPage({ params }: { params: Promi
             </div>
             <div className="flex justify-between pt-2">
               <span className="text-slate-500 font-semibold">Total Items</span>
-              <span className="font-bold text-emerald-600 text-lg">
+              <span className="font-bold text-evenvibe-primary text-lg">
                 {totalItems}
               </span>
             </div>

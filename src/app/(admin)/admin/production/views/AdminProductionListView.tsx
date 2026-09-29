@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Factory, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import Link from "next/link";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
+
+import { formatWorkflowStageLabel, getWorkflowStageBadgeColor } from "@/lib/productionWorkflow";
 
 const formatDate = (dateString: string, includeTime = false) => {
   const d = new Date(dateString);
@@ -24,31 +27,21 @@ const formatDate = (dateString: string, includeTime = false) => {
 
 const STAGE_LABELS: Record<string, string> = {
   ready_to_start: "Ready to Start",
-  production_started: "Production Started",
+  stock_sizes: "Stock Sizes",
+  inventory: "Inventory",
   cutting: "Cutting",
   stitching: "Stitching",
+  printing: "Printing",
+  embroidering: "Embroidering",
+  checking: "Checking",
+  ironing_packing: "Ironing and Packing",
+  production_started: "Production Started",
   finishing: "Finishing",
   production_completed: "Production Completed",
 };
 
-const getStageBadgeColor = (stage: string) => {
-  switch (stage) {
-    case "ready_to_start":
-      return "bg-amber-100 text-amber-800 border-amber-200";
-    case "production_started":
-      return "bg-blue-100 text-blue-800 border-blue-200";
-    case "cutting":
-      return "bg-indigo-100 text-indigo-800 border-indigo-200";
-    case "stitching":
-      return "bg-purple-100 text-purple-800 border-purple-200";
-    case "finishing":
-      return "bg-pink-100 text-pink-800 border-pink-200";
-    case "production_completed":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    default:
-      return "bg-slate-100 text-slate-800 border-slate-200";
-  }
-};
+const getStageBadgeColor = (stage: string) => getWorkflowStageBadgeColor(stage);
+
 
 export default function AdminProductionListView({
   orders: initialOrders,
@@ -137,6 +130,13 @@ export default function AdminProductionListView({
     },
   });
 
+  useRealtimeSubscription({
+    table: "order_production_workflows",
+    onEvent: () => {
+      router.refresh();
+    },
+  });
+
   const [search, setSearch] = useState(initialSearch || "");
   const [status, setStatus] = useState(initialStatus || "all");
   const [date, setDate] = useState(initialDate || "all");
@@ -186,7 +186,7 @@ export default function AdminProductionListView({
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <Factory className="h-6 w-6 text-emerald-600" />
+            <Factory className="h-6 w-6 text-evenvibe-primary" />
             Production Management
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -233,10 +233,14 @@ export default function AdminProductionListView({
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="ready_to_start">Ready to Start</SelectItem>
-                  <SelectItem value="production_started">Production Started</SelectItem>
+                  <SelectItem value="stock_sizes">Stock Sizes</SelectItem>
+                  <SelectItem value="inventory">Inventory</SelectItem>
                   <SelectItem value="cutting">Cutting</SelectItem>
                   <SelectItem value="stitching">Stitching</SelectItem>
-                  <SelectItem value="finishing">Finishing</SelectItem>
+                  <SelectItem value="printing">Printing</SelectItem>
+                  <SelectItem value="embroidering">Embroidering</SelectItem>
+                  <SelectItem value="checking">Checking</SelectItem>
+                  <SelectItem value="ironing_packing">Ironing and Packing</SelectItem>
                   <SelectItem value="production_completed">Production Completed</SelectItem>
                 </SelectContent>
               </Select>
@@ -293,7 +297,8 @@ export default function AdminProductionListView({
         </CardHeader>
 
         <CardContent>
-          <div className="rounded-md border overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden md:block rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
@@ -340,12 +345,12 @@ export default function AdminProductionListView({
                               order.stage
                             )}`}
                           >
-                            {STAGE_LABELS[order.stage] || order.stage}
+                            {formatWorkflowStageLabel(order.stage)}
                           </Badge>
                           {order.hasProductionRecord && (
                             <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
                               <div
-                                className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                                className="bg-status-success h-1.5 rounded-full transition-all"
                                 style={{ width: `${order.progressPercent}%` }}
                               />
                             </div>
@@ -379,14 +384,76 @@ export default function AdminProductionListView({
             </Table>
           </div>
 
+          {/* Mobile Cards View */}
+          <div className="md:hidden space-y-3 p-1">
+            {orders.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-sm">
+                {isFiltering
+                  ? "No production orders match your filters."
+                  : "No orders are ready for production yet."}
+              </div>
+            ) : (
+              orders.map((order) => (
+                <MobileCard key={order.id}>
+                  <MobileCardField label="Order Number" value={<span className="font-semibold text-slate-900">{order.orderNumber}</span>} />
+                  <MobileCardField label="School" value={order.schoolName} />
+                  <MobileCardField label="Order Date" value={formatDate(order.createdAt)} />
+                  <MobileCardField label="Total Students" value={<span className="font-semibold">{order.totalStudents}</span>} />
+                  <MobileCardField label="Total Items" value={<span className="font-semibold">{order.totalItems}</span>} />
+                  <MobileCardField
+                    label="Production Status"
+                    value={
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <Badge
+                          variant="outline"
+                          className={`w-fit px-2 py-0.5 text-xs font-semibold ${getStageBadgeColor(
+                            order.stage
+                          )}`}
+                        >
+                          {STAGE_LABELS[order.stage] || order.stage}
+                        </Badge>
+                        {order.hasProductionRecord && (
+                          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="bg-status-success h-2 rounded-full transition-all"
+                              style={{ width: `${order.progressPercent}%` }}
+                            />
+                          </div>
+                        )}
+                        {order.hasProductionRecord && (
+                          <span className="text-[11px] text-muted-foreground font-mono">
+                            {order.completedQuantity}/{order.totalItems} ({order.progressPercent}%)
+                          </span>
+                        )}
+                      </div>
+                    }
+                  />
+                  <MobileCardField label="Last Updated" value={formatDate(order.updatedAt, true)} />
+                  <MobileCardActions label="Action">
+                    <Link href={`/admin/production/${order.id}`} className="w-full">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 gap-1.5 border-slate-300 hover:bg-slate-100 justify-center text-evenvibe-deep border-emerald-200 hover:bg-emerald-50"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        View Production
+                      </Button>
+                    </Link>
+                  </MobileCardActions>
+                </MobileCard>
+              ))
+            )}
+          </div>
+
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4 text-sm text-muted-foreground">
+            <div className="flex flex-col sm:flex-row gap-2 items-center justify-between pt-4 text-sm text-muted-foreground">
               <div>
                 Showing {(currentPage - 1) * pageSize + 1} to{" "}
                 {Math.min(currentPage * pageSize, totalCount)} of {totalCount} production orders
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <Button
                   variant="outline"
                   size="sm"

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default async function SizesPage() {
-  const { students, allConfigs } = await getStudentSizes();
+  const { students, allConfigs, activeStyles } = await getStudentSizes();
 
   return (
     <div className="flex-1 space-y-6 p-8 pt-6">
@@ -16,7 +16,7 @@ export default async function SizesPage() {
         <h2 className="text-3xl font-bold tracking-tight text-slate-900">Uniform Size Collection</h2>
       </div>
 
-      <SizesWorkflow students={students} allConfigs={allConfigs} />
+      <SizesWorkflow students={students} allConfigs={allConfigs} activeStyles={activeStyles} />
     </div>
   );
 }

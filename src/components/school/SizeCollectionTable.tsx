@@ -1,5 +1,5 @@
 "use client";
-import { AllConfigItem } from "@/app/(school)/school/sizes/actions";
+import { AllConfigItem, ActiveStyleItem } from "@/app/(school)/school/sizes/actions";
 
 import { useState } from "react";
 import { StudentWithSize } from "@/app/(school)/school/sizes/schema";
@@ -10,13 +10,16 @@ import { Button } from "@/components/ui/button";
 import { Search, Edit2, PlusCircle } from "lucide-react";
 import { SizeFormDialog } from "./SizeFormDialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
+import { formatDateTimeIST } from "@/lib/utils";
 
 interface SizeCollectionTableProps {
   students: StudentWithSize[];
   configurations: AllConfigItem[];
+  activeStyles?: ActiveStyleItem[];
 }
 
-export function SizeCollectionTable({ students, configurations }: SizeCollectionTableProps) {
+export function SizeCollectionTable({ students, configurations, activeStyles = [] }: SizeCollectionTableProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [uniformFilter, setUniformFilter] = useState("all");
@@ -83,7 +86,8 @@ export function SizeCollectionTable({ students, configurations }: SizeCollection
         </div>
       </div>
 
-      <div className="rounded-md border border-slate-200 bg-white shadow-sm overflow-x-auto">
+      {/* Desktop Main Table */}
+      <div className="hidden md:block rounded-md border border-slate-200 bg-white shadow-sm overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
@@ -110,15 +114,26 @@ export function SizeCollectionTable({ students, configurations }: SizeCollection
                   </TableCell>
                   <TableCell>
                     {student.size_record?.is_complete ? (
-                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Complete</Badge>
+                      <div className="space-y-0.5">
+                        <Badge variant="outline" className="bg-evenvibe-light text-evenvibe-deep border-emerald-200">Complete</Badge>
+                        <p className="text-[11px] text-slate-500 whitespace-nowrap">
+                          {student.size_record.updated_at ? `Updated: ${formatDateTimeIST(student.size_record.updated_at)}` : "Date not available"}
+                        </p>
+                      </div>
                     ) : (
-                      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pending</Badge>
+                      <div className="space-y-0.5">
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pending</Badge>
+                        <p className="text-[11px] text-slate-400 whitespace-nowrap">
+                          No size collected yet
+                        </p>
+                      </div>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
                     <SizeFormDialog 
                       student={student}
                       configurations={configurations}
+                      activeStyles={activeStyles}
                       trigger={
                         <Button variant={student.size_record ? "outline" : "default"} size="sm">
                           {student.size_record ? (
@@ -141,6 +156,69 @@ export function SizeCollectionTable({ students, configurations }: SizeCollection
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {filteredStudents.length > 0 ? (
+          filteredStudents.map((student) => {
+            const uniformLabel =
+              student.size_record?.uniform_type === "regular"
+                ? "Regular Uniform"
+                : student.size_record?.uniform_type === "tshirt"
+                ? "T-Shirt Uniform"
+                : "-";
+
+            return (
+              <MobileCard key={student.id}>
+                <MobileCardField label="Student" value={student.student_name} />
+                <MobileCardField label="Class & Sec" value={`${student.class_name || ""}-${student.section || ""}`} />
+                <MobileCardField label="Adm. No" value={student.admission_number || "-"} />
+                <MobileCardField label="Gender" value={student.gender || "-"} />
+                <MobileCardField label="Uniform Type" value={uniformLabel} />
+                <MobileCardField label="Status">
+                  {student.size_record?.is_complete ? (
+                    <Badge variant="outline" className="bg-evenvibe-light text-evenvibe-deep border-emerald-200">Complete</Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pending</Badge>
+                  )}
+                </MobileCardField>
+                <MobileCardField
+                  label="Last Updated"
+                  value={
+                    student.size_record?.is_complete ? (
+                      <span className="text-xs text-slate-700 font-medium">
+                        {student.size_record.updated_at ? formatDateTimeIST(student.size_record.updated_at) : "Date not available"}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 italic">No size collected yet</span>
+                    )
+                  }
+                />
+                <MobileCardActions label="Action">
+                  <SizeFormDialog 
+                    student={student}
+                    configurations={configurations}
+                    activeStyles={activeStyles}
+                    trigger={
+                      <Button variant={student.size_record ? "outline" : "default"} size="sm">
+                        {student.size_record ? (
+                          <><Edit2 className="w-3 h-3 mr-2" /> Edit Size</>
+                        ) : (
+                          <><PlusCircle className="w-3 h-3 mr-2" /> Collect Size</>
+                        )}
+                      </Button>
+                    }
+                  />
+                </MobileCardActions>
+              </MobileCard>
+            );
+          })
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500 text-sm">
+            No students found matching your filters.
+          </div>
+        )}
       </div>
     </div>
   );

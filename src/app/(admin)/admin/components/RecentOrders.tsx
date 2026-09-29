@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { RecentOrderSummary } from "../types";
 import { ArrowRight, Eye, FileText, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 interface RecentOrdersProps {
   orders: RecentOrderSummary[];
@@ -39,21 +40,21 @@ const getStatusBadgeStyle = (status: string) => {
     case "submitted":
       return "bg-blue-50 text-blue-700 border-blue-200";
     case "under_review":
-      return "bg-indigo-50 text-indigo-700 border-indigo-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "confirmed":
       return "bg-sky-50 text-sky-700 border-sky-200";
     case "production":
       return "bg-amber-50 text-amber-700 border-amber-200";
     case "quality_check":
-      return "bg-purple-50 text-purple-700 border-purple-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "packed":
-      return "bg-teal-50 text-teal-700 border-teal-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "dispatched":
       return "bg-cyan-50 text-cyan-700 border-cyan-200";
     case "in_transit":
       return "bg-orange-50 text-orange-700 border-orange-200";
     case "delivered":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-emerald-200";
     case "cancelled":
       return "bg-slate-100 text-slate-600 border-slate-200";
     default:
@@ -67,7 +68,7 @@ export default function RecentOrders({ orders }: RecentOrdersProps) {
       <CardHeader className="pb-3 flex flex-row items-center justify-between border-b border-slate-100">
         <div>
           <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-emerald-600" />
+            <ShoppingBag className="w-5 h-5 text-evenvibe-primary" />
             <CardTitle className="text-lg font-semibold text-slate-900">
               Recent Orders
             </CardTitle>
@@ -79,7 +80,7 @@ export default function RecentOrders({ orders }: RecentOrdersProps) {
 
         <Link
           href="/admin/orders"
-          className="text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1 hover:underline"
+          className="text-xs font-medium text-evenvibe-primary hover:text-emerald-700 flex items-center gap-1 hover:underline"
         >
           All Orders
           <ArrowRight className="w-3.5 h-3.5" />
@@ -87,7 +88,8 @@ export default function RecentOrders({ orders }: RecentOrdersProps) {
       </CardHeader>
 
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-slate-50/70">
               <TableRow className="border-b border-slate-200/80">
@@ -143,7 +145,7 @@ export default function RecentOrders({ orders }: RecentOrdersProps) {
                         href={`/admin/orders/${order.id}`}
                         className={cn(
                           buttonVariants({ variant: "ghost", size: "sm" }),
-                          "text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-8 px-2.5 inline-flex items-center"
+                          "text-xs font-medium text-evenvibe-deep hover:text-emerald-800 hover:bg-emerald-50 h-8 px-2.5 inline-flex items-center"
                         )}
                       >
                         <Eye className="w-3.5 h-3.5 mr-1" />
@@ -155,6 +157,51 @@ export default function RecentOrders({ orders }: RecentOrdersProps) {
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+          {orders.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-sm">No orders yet.</div>
+          ) : (
+            orders.map((order) => (
+              <MobileCard key={order.id}>
+                <MobileCardField
+                  label="Order Number"
+                  value={
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-900">
+                      <FileText className="h-4 w-4 text-slate-400 shrink-0" />
+                      <span>{order.order_number}</span>
+                    </div>
+                  }
+                />
+                <MobileCardField label="School" value={order.school_name} />
+                <MobileCardField label="Order Date" value={formatIndianDate(order.created_at)} />
+                <MobileCardField label="Students" value={<span className="font-semibold text-slate-900">{order.students_count}</span>} />
+                <MobileCardField label="Items" value={<span className="font-semibold text-slate-900">{order.items_count}</span>} />
+                <MobileCardField
+                  label="Status"
+                  value={
+                    <Badge
+                      variant="outline"
+                      className={cn("px-2.5 py-0.5 text-xs font-medium border", getStatusBadgeStyle(order.status))}
+                    >
+                      {formatStatusLabel(order.status)}
+                    </Badge>
+                  }
+                />
+                <MobileCardActions label="Action">
+                  <Link
+                    href={`/admin/orders/${order.id}`}
+                    className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium text-evenvibe-deep border border-emerald-200 hover:bg-emerald-50 h-8 px-3 rounded-md bg-white"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    View Details
+                  </Link>
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
         </div>
       </CardContent>
     </Card>

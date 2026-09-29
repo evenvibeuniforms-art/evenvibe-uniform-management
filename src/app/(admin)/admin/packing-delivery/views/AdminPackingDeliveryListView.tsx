@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Truck, ChevronLeft, ChevronRight, Eye, Play } from "lucide-react";
 import Link from "next/link";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 const formatDate = (dateString: string | null, includeTime = false) => {
   if (!dateString) return "—";
@@ -24,9 +25,9 @@ const formatDate = (dateString: string | null, includeTime = false) => {
 };
 
 export const DELIVERY_CATEGORY_LABELS: Record<string, string> = {
-  ready_for_packing: "Ready for Packing",
-  packing_in_progress: "Packing In Progress",
-  packed: "Packed",
+  ready_for_packing: "Ready for Delivery",
+  packing_in_progress: "In Progress",
+  packed: "Ready to Dispatch",
   dispatched: "Dispatched",
   in_transit: "In Transit",
   delivered: "Delivered",
@@ -39,9 +40,9 @@ export const getDeliveryBadgeColor = (category: string) => {
     case "packing_in_progress":
       return "bg-blue-100 text-blue-800 border-blue-200";
     case "packed":
-      return "bg-teal-100 text-teal-800 border-teal-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "dispatched":
-      return "bg-purple-100 text-purple-800 border-purple-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "in_transit":
       return "bg-sky-100 text-sky-800 border-sky-200";
     case "delivered":
@@ -227,11 +228,11 @@ export default function AdminPackingDeliveryListView({
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <Truck className="h-6 w-6 text-emerald-600" />
-            Packing & Delivery Management
+            <Truck className="h-6 w-6 text-evenvibe-primary" />
+            Delivery Management
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Pack verified orders with standardized checklists, assign couriers, and track end-to-end fulfillment through delivery.
+            Manage approved order shipments, courier assignments, and track end-to-end fulfillment through delivery.
           </p>
         </div>
       </div>
@@ -245,7 +246,7 @@ export default function AdminPackingDeliveryListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "all"
-              ? "border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600"
+              ? "border-evenvibe-primary bg-emerald-50/50 ring-1 ring-emerald-600"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
@@ -260,11 +261,11 @@ export default function AdminPackingDeliveryListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "ready_for_packing"
-              ? "border-amber-500 bg-amber-50/50 ring-1 ring-amber-500"
+              ? "border-status-warning bg-amber-50/50 ring-1 ring-status-warning"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
-          <p className="text-xs font-medium text-slate-500">Ready for Packing</p>
+          <p className="text-xs font-medium text-slate-500">Ready for Delivery</p>
           <p className="text-xl font-bold text-amber-700 mt-1">{statusCounts.ready_for_packing}</p>
         </button>
 
@@ -290,12 +291,12 @@ export default function AdminPackingDeliveryListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "packed"
-              ? "border-teal-600 bg-teal-50/50 ring-1 ring-teal-600"
+              ? "border-evenvibe-primary bg-evenvibe-light/50 ring-1 ring-evenvibe-primary"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
           <p className="text-xs font-medium text-slate-500">Packed</p>
-          <p className="text-xl font-bold text-teal-700 mt-1">{statusCounts.packed}</p>
+          <p className="text-xl font-bold text-evenvibe-deep mt-1">{statusCounts.packed}</p>
         </button>
 
         <button
@@ -305,12 +306,12 @@ export default function AdminPackingDeliveryListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "dispatched"
-              ? "border-purple-600 bg-purple-50/50 ring-1 ring-purple-600"
+              ? "border-evenvibe-primary bg-evenvibe-light/50 ring-1 ring-evenvibe-primary"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
           <p className="text-xs font-medium text-slate-500">Dispatched</p>
-          <p className="text-xl font-bold text-purple-700 mt-1">{statusCounts.dispatched}</p>
+          <p className="text-xl font-bold text-evenvibe-deep mt-1">{statusCounts.dispatched}</p>
         </button>
 
         <button
@@ -320,7 +321,7 @@ export default function AdminPackingDeliveryListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "in_transit"
-              ? "border-sky-600 bg-sky-50/50 ring-1 ring-sky-600"
+              ? "border-status-info bg-sky-50/50 ring-1 ring-status-info"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
@@ -335,12 +336,12 @@ export default function AdminPackingDeliveryListView({
           }}
           className={`p-3 rounded-lg border text-left transition-all ${
             status === "delivered"
-              ? "border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600"
+              ? "border-evenvibe-primary bg-emerald-50/50 ring-1 ring-emerald-600"
               : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
         >
           <p className="text-xs font-medium text-slate-500">Delivered</p>
-          <p className="text-xl font-bold text-emerald-700 mt-1">{statusCounts.delivered}</p>
+          <p className="text-xl font-bold text-evenvibe-deep mt-1">{statusCounts.delivered}</p>
         </button>
       </div>
 
@@ -467,7 +468,8 @@ export default function AdminPackingDeliveryListView({
             </CardDescription>
           </div>
         </CardHeader>
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
@@ -489,7 +491,7 @@ export default function AdminPackingDeliveryListView({
                   <TableCell colSpan={10} className="text-center py-12 text-slate-500 text-sm">
                     {isFiltering
                       ? "No orders match your filter criteria."
-                      : "No orders are currently in Packing & Delivery."}
+                      : "No orders are currently in Delivery."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -498,7 +500,7 @@ export default function AdminPackingDeliveryListView({
                     <TableCell className="font-medium text-slate-900">
                       <Link
                         href={`/admin/packing-delivery/${o.id}`}
-                        className="hover:underline text-emerald-700 font-semibold"
+                        className="hover:underline text-evenvibe-deep font-semibold"
                       >
                         {o.orderNumber}
                       </Link>
@@ -539,10 +541,10 @@ export default function AdminPackingDeliveryListView({
                         <Link href={`/admin/packing-delivery/${o.id}`}>
                           <Button
                             size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 h-8 text-xs font-medium"
+                            className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white gap-1 h-8 text-xs font-medium"
                           >
                             <Play className="h-3.5 w-3.5" />
-                            Start Packing
+                            Start Delivery
                           </Button>
                         </Link>
                       ) : (
@@ -553,7 +555,7 @@ export default function AdminPackingDeliveryListView({
                             className="border-slate-300 hover:bg-slate-100 gap-1 h-8 text-xs font-medium"
                           >
                             <Eye className="h-3.5 w-3.5" />
-                            View Packing & Delivery
+                            View Delivery
                           </Button>
                         </Link>
                       )}
@@ -565,13 +567,84 @@ export default function AdminPackingDeliveryListView({
           </Table>
         </div>
 
+        {/* Mobile Cards View */}
+        <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+          {orders.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-sm">
+              {isFiltering
+                ? "No orders match your filter criteria."
+                : "No orders are currently in Delivery."}
+            </div>
+          ) : (
+            orders.map((o) => (
+              <MobileCard key={o.id}>
+                <MobileCardField
+                  label="Order Number"
+                  value={
+                    <Link
+                      href={`/admin/packing-delivery/${o.id}`}
+                      className="text-evenvibe-deep font-bold hover:underline"
+                    >
+                      {o.orderNumber}
+                    </Link>
+                  }
+                />
+                <MobileCardField label="School" value={o.schoolName} />
+                <MobileCardField label="Order Date" value={formatDate(o.createdAt)} />
+                <MobileCardField label="Total Students" value={<span className="font-semibold">{o.totalStudents}</span>} />
+                <MobileCardField label="Total Items" value={<span className="font-semibold">{o.totalItems}</span>} />
+                <MobileCardField
+                  label="Delivery Status"
+                  value={
+                    <Badge
+                      variant="outline"
+                      className={`text-xs px-2 py-0.5 font-medium whitespace-nowrap ${getDeliveryBadgeColor(
+                        o.deliveryCategory
+                      )}`}
+                    >
+                      {DELIVERY_CATEGORY_LABELS[o.deliveryCategory] || o.deliveryCategory}
+                    </Badge>
+                  }
+                />
+                <MobileCardField label="Courier" value={o.courierName || "—"} />
+                <MobileCardField label="Tracking Number" value={<span className="font-mono text-xs">{o.trackingNumber || "—"}</span>} />
+                <MobileCardField label="Last Updated" value={formatDate(o.updatedAt, true)} />
+                <MobileCardActions label="Action">
+                  {o.deliveryCategory === "ready_for_packing" ? (
+                    <Link href={`/admin/packing-delivery/${o.id}`} className="w-full">
+                      <Button
+                        size="sm"
+                        className="w-full bg-evenvibe-primary hover:bg-evenvibe-deep text-white gap-1.5 h-8 text-xs font-medium justify-center"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                        Start Delivery
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link href={`/admin/packing-delivery/${o.id}`} className="w-full">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full border-slate-300 hover:bg-slate-100 gap-1.5 h-8 text-xs font-medium justify-center"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        View Delivery
+                      </Button>
+                    </Link>
+                  )}
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
+        </div>
+
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
+          <div className="flex flex-col sm:flex-row gap-2 items-center justify-between px-4 py-3 border-t bg-slate-50/50">
             <p className="text-xs text-muted-foreground">
               Page {currentPage} of {totalPages}
             </p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 w-full sm:w-auto justify-end">
               <Button
                 variant="outline"
                 size="sm"

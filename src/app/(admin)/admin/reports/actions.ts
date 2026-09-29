@@ -295,7 +295,7 @@ export async function getSchoolPerformanceReport(
   const supabase = await createClient();
   const bounds = getDateBounds(filters.dateFilter, filters.customStartDate, filters.customEndDate);
 
-  let query = supabase.from("schools").select("id, name, school_code");
+  let query = supabase.from("schools").select("id, name, school_code, city");
   if (filters.schoolId && filters.schoolId !== "all") {
     query = query.eq("id", filters.schoolId);
   }
@@ -372,6 +372,7 @@ export async function getSchoolPerformanceReport(
       schoolId: s.id,
       schoolName: s.name,
       schoolCode: s.school_code || "—",
+      city: s.city || "—",
       totalStudents: studentCountMap.get(s.id) || 0,
       orderCount: schoolOrders.length,
       totalItems,
@@ -519,6 +520,8 @@ export async function getUniformSizeReport(
       class_name,
       section_name,
       gender,
+      style_id,
+      style_name,
       item_name,
       size,
       quantity,
@@ -570,13 +573,15 @@ export async function getUniformSizeReport(
       return;
     }
 
-    const key = `${schoolName}|${it.class_name || "—"}|${it.section_name || "—"}|${it.gender || "—"}|${it.item_name}|${it.size}`;
+    const styleName = it.style_name || "Style not available";
+    const key = `${schoolName}|${styleName}|${it.class_name || "—"}|${it.section_name || "—"}|${it.gender || "—"}|${it.item_name}|${it.size}`;
     if (!aggregatedMap.has(key)) {
       aggregatedMap.set(key, {
         schoolName,
         className: it.class_name || "—",
         section: it.section_name || "—",
         gender: it.gender || "—",
+        styleName,
         itemName: it.item_name || "Uniform Item",
         size: it.size || "—",
         quantity: 0,
@@ -1093,7 +1098,7 @@ export async function exportCompleteReportToExcel(
       const res = await getSchoolPerformanceReport(filters, largePagination);
       const data = res.data.map((r) => ({
         "School Name": r.schoolName,
-        "School Code": r.schoolCode,
+        City: r.city || "—",
         "Total Students": r.totalStudents,
         "Total Orders": r.orderCount,
         "Total Items Ordered": r.totalItems,

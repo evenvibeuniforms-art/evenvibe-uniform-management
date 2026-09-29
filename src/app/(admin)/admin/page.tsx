@@ -22,7 +22,7 @@ export default async function AdminDashboardPage() {
   if (loadError || !dashboardData) {
     return (
       <div className="p-8 max-w-xl mx-auto text-center space-y-4">
-        <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200">
+        <div className="w-12 h-12 rounded-full bg-rose-50 text-status-error flex items-center justify-center mx-auto border border-rose-200">
           <AlertCircle className="w-6 h-6" />
         </div>
         <h2 className="text-xl font-semibold text-slate-900">

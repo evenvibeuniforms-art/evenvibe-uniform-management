@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { StudentReportRow, PaginatedResult, GlobalReportFilters } from "../../types";
 import { ExportReportButton } from "../components/ExportReportButton";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 
 interface StudentReportTabProps {
   report: PaginatedResult<StudentReportRow>;
@@ -17,10 +18,10 @@ export function StudentReportTab({ report, filters, onPageChange }: StudentRepor
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
-      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
+      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-            <Users className="h-4 w-4 text-indigo-600" />
+            <Users className="h-4 w-4 text-evenvibe-primary" />
             Student Enrollment & Size Collection Report ({totalCount})
           </CardTitle>
           <CardDescription className="text-xs mt-0.5">
@@ -29,7 +30,9 @@ export function StudentReportTab({ report, filters, onPageChange }: StudentRepor
         </div>
         <ExportReportButton tabName="students" tabLabel="Student Report" filters={filters} />
       </CardHeader>
-      <div className="overflow-x-auto">
+
+      {/* Desktop Table View (>= 768px) */}
+      <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
@@ -66,7 +69,7 @@ export function StudentReportTab({ report, filters, onPageChange }: StudentRepor
                       variant="outline"
                       className={`text-[11px] px-2 py-0.5 font-medium ${
                         st.sizeStatus === "completed"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          ? "bg-evenvibe-light text-evenvibe-deep border-emerald-200"
                           : "bg-amber-50 text-amber-700 border-amber-200"
                       }`}
                     >
@@ -75,7 +78,7 @@ export function StudentReportTab({ report, filters, onPageChange }: StudentRepor
                   </TableCell>
                   <TableCell className="text-center text-slate-800 text-xs font-semibold">
                     {st.orderParticipationCount > 0 ? (
-                      <span className="text-indigo-700 font-semibold">{st.orderParticipationCount} order(s)</span>
+                      <span className="text-evenvibe-deep font-semibold">{st.orderParticipationCount} order(s)</span>
                     ) : (
                       <span className="text-slate-400">None</span>
                     )}
@@ -87,10 +90,55 @@ export function StudentReportTab({ report, filters, onPageChange }: StudentRepor
         </Table>
       </div>
 
+      {/* Mobile Card View (< 768px) */}
+      <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+        {data.length === 0 ? (
+          <div className="text-center py-8 text-xs text-slate-500 bg-white rounded-lg border border-slate-200">
+            No students found matching the selected filters.
+          </div>
+        ) : (
+          data.map((st) => (
+            <MobileCard key={st.studentId}>
+              <MobileCardField label="Student Name" value={st.studentName} />
+              <MobileCardField label="Admission No" value={st.admissionNumber} />
+              <MobileCardField label="School" value={st.schoolName} />
+              <MobileCardField label="Class" value={st.className} />
+              <MobileCardField label="Section" value={st.section} />
+              <MobileCardField label="Gender" value={<span className="capitalize">{st.gender}</span>} />
+              <MobileCardField
+                label="Size Status"
+                value={
+                  <Badge
+                    variant="outline"
+                    className={`text-[11px] px-2 py-0.5 font-medium ${
+                      st.sizeStatus === "completed"
+                        ? "bg-evenvibe-light text-evenvibe-deep border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}
+                  >
+                    {st.sizeStatus === "completed" ? "Completed" : "Pending"}
+                  </Badge>
+                }
+              />
+              <MobileCardField
+                label="Order Participation"
+                value={
+                  st.orderParticipationCount > 0 ? (
+                    <span className="text-evenvibe-deep font-semibold">{st.orderParticipationCount} order(s)</span>
+                  ) : (
+                    <span className="text-slate-400">None</span>
+                  )
+                }
+              />
+            </MobileCard>
+          ))
+        )}
+      </div>
+
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
-          <p className="text-xs text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3 border-t bg-slate-50/50">
+          <p className="text-xs text-muted-foreground text-center sm:text-left">
             Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} students
           </p>
           <div className="flex items-center gap-1">

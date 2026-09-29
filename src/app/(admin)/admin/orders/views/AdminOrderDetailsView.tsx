@@ -15,6 +15,9 @@ import AdminOrderQuantityBreakdown, { ReqItem } from "./AdminOrderQuantityBreakd
 import { toast } from "sonner";
 import { ArrowLeft, Clock, History, Truck, PackageCheck, Pencil, AlertCircle, Factory, ClipboardCheck } from "lucide-react";
 import { updateOrderStatus, modifyOrderQuantity, cancelOrder } from "../actions";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
+import { OrderWorkflowStage } from "@/lib/productionWorkflow";
+import OrderWorkflowConfigurator from "@/components/production/OrderWorkflowConfigurator";
 
 export interface AdminOrderDetailsData {
   id: string;
@@ -101,12 +104,12 @@ const getStatusColor = (s: string) => {
   switch (s) {
     case "submitted": return "bg-blue-100 text-blue-800 border-blue-200";
     case "under_review": return "bg-amber-100 text-amber-800 border-amber-200";
-    case "confirmed": return "bg-indigo-100 text-indigo-800 border-indigo-200";
-    case "production": return "bg-purple-100 text-purple-800 border-purple-200";
+    case "confirmed": return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
+    case "production": return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "quality_check": return "bg-pink-100 text-pink-800 border-pink-200";
     case "packed": return "bg-orange-100 text-orange-800 border-orange-200";
     case "dispatched": return "bg-cyan-100 text-cyan-800 border-cyan-200";
-    case "in_transit": return "bg-teal-100 text-teal-800 border-teal-200";
+    case "in_transit": return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "delivered": return "bg-emerald-100 text-emerald-800 border-emerald-200";
     default: return "bg-slate-100 text-slate-800";
   }
@@ -119,11 +122,15 @@ export default function AdminOrderDetailsView({
   requirementItems,
   statusHistory: initialStatusHistory,
   modificationHistory,
+  orderWorkflows = [],
+  isWorkflowLocked = false,
 }: {
   order: AdminOrderDetailsData;
   requirementItems: ReqItem[];
   statusHistory: OrderStatusHistoryItem[];
   modificationHistory: OrderModificationHistoryItem[];
+  orderWorkflows?: OrderWorkflowStage[];
+  isWorkflowLocked?: boolean;
 }) {
   const router = useRouter();
   const [order, setOrder] = useState<AdminOrderDetailsData>(initialOrder);
@@ -260,14 +267,14 @@ export default function AdminOrderDetailsView({
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Order #{order.order_number}</h1>
             <p className="text-sm text-muted-foreground">
-              {order.schools?.name}
+              {order.schools?.name || "Unknown School"}
             </p>
           </div>
           <div className="ml-auto flex items-center gap-3">
             {(order.status === "confirmed" || order.status === "production") && (
               <Button 
                 variant="outline" 
-                className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-1.5"
+                className="text-evenvibe-primary border-evenvibe-light hover:bg-evenvibe-light hover:text-evenvibe-deep flex items-center gap-1.5"
                 onClick={() => router.push(`/admin/production/${order.id}`)}
               >
                 <Factory className="h-4 w-4" />
@@ -277,7 +284,7 @@ export default function AdminOrderDetailsView({
             {["quality_check", "packed", "dispatched", "in_transit", "delivered"].includes(order.status) && (
               <Button 
                 variant="outline" 
-                className="text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 flex items-center gap-1.5"
+                className="text-evenvibe-deep border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 flex items-center gap-1.5"
                 onClick={() => router.push(`/admin/quality-check/${order.id}`)}
               >
                 <ClipboardCheck className="h-4 w-4" />
@@ -287,7 +294,7 @@ export default function AdminOrderDetailsView({
             {canCancelOrder && (
               <Button 
                 variant="outline" 
-                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                className="text-status-error border-red-200 hover:bg-red-50 hover:text-red-700"
                 onClick={() => setShowCancelForm(!showCancelForm)}
               >
                 Cancel Order
@@ -341,10 +348,20 @@ export default function AdminOrderDetailsView({
         <div className="md:col-span-2 space-y-6">
           <Tabs defaultValue="breakdown" className="w-full">
             <TabsList className="w-full justify-start border-b rounded-none px-0 h-auto pb-1 bg-transparent space-x-6">
-              <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1">Overview</TabsTrigger>
-              <TabsTrigger value="breakdown" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1">Quantity Breakdown</TabsTrigger>
-              <TabsTrigger value="timeline" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1">Status Timeline</TabsTrigger>
+              <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-evenvibe-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1">Overview</TabsTrigger>
+              <TabsTrigger value="workflow" className="rounded-none border-b-2 border-transparent data-[state=active]:border-evenvibe-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1">Production Workflow</TabsTrigger>
+              <TabsTrigger value="breakdown" className="rounded-none border-b-2 border-transparent data-[state=active]:border-evenvibe-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1">Quantity Breakdown</TabsTrigger>
+              <TabsTrigger value="timeline" className="rounded-none border-b-2 border-transparent data-[state=active]:border-evenvibe-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2 px-1">Status Timeline</TabsTrigger>
             </TabsList>
+            
+            <TabsContent value="workflow" className="mt-6">
+              <OrderWorkflowConfigurator
+                orderId={order.id}
+                initialWorkflows={orderWorkflows}
+                isLocked={isWorkflowLocked}
+                orderNumber={order.order_number}
+              />
+            </TabsContent>
             
             <TabsContent value="overview" className="mt-6">
               <Card>
@@ -356,65 +373,121 @@ export default function AdminOrderDetailsView({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Gender/Uniform</TableHead>
-                      <TableHead>Item</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead className="text-right">Quantity</TableHead>
-                      {canModifyQuantity && <TableHead className="w-[100px]"></TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {requirementItems.map((item: ReqItem) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="capitalize">{item.gender || "Unknown"}</TableCell>
-                        <TableCell className="capitalize">{item.item_name}</TableCell>
-                        <TableCell>{item.size}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {editingItemId === item.id ? (
+              <div className="rounded-md border overflow-hidden">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Gender/Uniform</TableHead>
+                        <TableHead>Item</TableHead>
+                        <TableHead>Size</TableHead>
+                        <TableHead className="text-right">Quantity</TableHead>
+                        {canModifyQuantity && <TableHead className="w-[100px]"></TableHead>}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {requirementItems.map((item: ReqItem) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="capitalize">{item.gender || "Unknown"}</TableCell>
+                          <TableCell className="capitalize">{item.item_name}</TableCell>
+                          <TableCell>{item.size}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            {editingItemId === item.id ? (
+                              <Input 
+                                type="number" 
+                                min="0"
+                                value={editQuantity} 
+                                onChange={e => setEditQuantity(parseInt(e.target.value) || 0)}
+                                className="w-20 text-right ml-auto h-8"
+                              />
+                            ) : (
+                              item.quantity
+                            )}
+                          </TableCell>
+                          {canModifyQuantity && (
+                            <TableCell>
+                              {editingItemId === item.id ? (
+                                <div className="flex gap-2">
+                                  <Button size="sm" variant="default" onClick={() => handleSaveQuantity(item.id)} disabled={isSavingQuantity}>
+                                    Save
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setEditingItemId(null)} disabled={isSavingQuantity}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button size="icon" variant="ghost" onClick={() => handleEditClick(item)}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                      <TableRow className="bg-slate-50">
+                        <TableCell colSpan={3} className="font-semibold text-right">Total Quantity</TableCell>
+                        <TableCell className="text-right font-bold text-lg">
+                          {requirementItems.reduce((acc: number, item: ReqItem) => acc + item.quantity, 0)}
+                        </TableCell>
+                        {canModifyQuantity && <TableCell></TableCell>}
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile Cards View */}
+                <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+                  {requirementItems.map((item: ReqItem) => (
+                    <MobileCard key={item.id}>
+                      <MobileCardField label="Gender/Uniform" value={<span className="capitalize">{item.gender || "Unknown"}</span>} />
+                      <MobileCardField label="Item" value={<span className="capitalize font-medium text-slate-900">{item.item_name}</span>} />
+                      <MobileCardField label="Size" value={<span className="font-semibold text-slate-900">{item.size}</span>} />
+                      <MobileCardField
+                        label="Quantity"
+                        value={
+                          editingItemId === item.id ? (
                             <Input 
                               type="number" 
                               min="0"
                               value={editQuantity} 
                               onChange={e => setEditQuantity(parseInt(e.target.value) || 0)}
-                              className="w-20 text-right ml-auto h-8"
+                              className="w-24 h-8 text-sm"
                             />
                           ) : (
-                            item.quantity
-                          )}
-                        </TableCell>
-                        {canModifyQuantity && (
-                          <TableCell>
-                            {editingItemId === item.id ? (
-                              <div className="flex gap-2">
-                                <Button size="sm" variant="default" onClick={() => handleSaveQuantity(item.id)} disabled={isSavingQuantity}>
-                                  Save
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={() => setEditingItemId(null)} disabled={isSavingQuantity}>
-                                  Cancel
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button size="icon" variant="ghost" onClick={() => handleEditClick(item)}>
-                                <Pencil className="h-4 w-4" />
+                            <span className="font-bold text-slate-900">{item.quantity}</span>
+                          )
+                        }
+                      />
+                      {canModifyQuantity && (
+                        <MobileCardActions label="Action">
+                          {editingItemId === item.id ? (
+                            <div className="flex gap-2 w-full">
+                              <Button size="sm" className="flex-1 bg-evenvibe-primary hover:bg-evenvibe-deep h-8" onClick={() => handleSaveQuantity(item.id)} disabled={isSavingQuantity}>
+                                Save
                               </Button>
-                            )}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
-                    <TableRow className="bg-slate-50">
-                      <TableCell colSpan={3} className="font-semibold text-right">Total Quantity</TableCell>
-                      <TableCell className="text-right font-bold text-lg">
-                        {requirementItems.reduce((acc: number, item: ReqItem) => acc + item.quantity, 0)}
-                      </TableCell>
-                      {canModifyQuantity && <TableCell></TableCell>}
-                    </TableRow>
-                  </TableBody>
-                </Table>
+                              <Button size="sm" variant="outline" className="flex-1 h-8" onClick={() => setEditingItemId(null)} disabled={isSavingQuantity}>
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="outline" className="w-full text-slate-700 border-slate-200 hover:bg-slate-50 h-8 gap-1.5 justify-center" onClick={() => handleEditClick(item)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit Quantity
+                            </Button>
+                          )}
+                        </MobileCardActions>
+                      )}
+                    </MobileCard>
+                  ))}
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-lg flex items-center justify-between">
+                    <span className="font-semibold text-slate-700 text-sm">Total Quantity</span>
+                    <span className="font-bold text-lg text-slate-900">
+                      {requirementItems.reduce((acc: number, item: ReqItem) => acc + item.quantity, 0)}
+                    </span>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -449,7 +522,7 @@ export default function AdminOrderDetailsView({
                             <div className="font-bold text-slate-900">
                               {isStatus ? formatStatus(evt.status) : "Quantity Modified"}
                             </div>
-                            <time className="font-caveat font-medium text-indigo-500">
+                            <time className="font-caveat font-medium text-evenvibe-primary">
                               {formatDate(evt.created_at, true)}
                             </time>
                           </div>

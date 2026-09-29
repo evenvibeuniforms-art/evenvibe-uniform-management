@@ -200,7 +200,7 @@ function InnerForm({
         {/* Title */}
         <div className="space-y-1.5">
           <Label htmlFor="notif-title" className="text-xs font-semibold text-slate-700">
-            Title <span className="text-red-500">*</span>
+            Title <span className="text-status-error">*</span>
           </Label>
           <Input
             id="notif-title"
@@ -216,7 +216,7 @@ function InnerForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold text-slate-700">
-              Notification Type <span className="text-red-500">*</span>
+              Notification Type <span className="text-status-error">*</span>
             </Label>
             <Select
               value={notificationType}
@@ -239,7 +239,7 @@ function InnerForm({
 
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold text-slate-700">
-              Target Audience <span className="text-red-500">*</span>
+              Target Audience <span className="text-status-error">*</span>
             </Label>
             <Select
               value={targetType}
@@ -324,7 +324,7 @@ function InnerForm({
         {/* Message Body */}
         <div className="space-y-1.5">
           <Label htmlFor="notif-message" className="text-xs font-semibold text-slate-700">
-            Message Content <span className="text-red-500">*</span>
+            Message Content <span className="text-status-error">*</span>
           </Label>
           <Textarea
             id="notif-message"
@@ -340,7 +340,7 @@ function InnerForm({
         {/* Publish Mode */}
         <div className="space-y-2 pt-2 border-t">
           <Label className="text-xs font-semibold text-slate-700">
-            Delivery Action <span className="text-red-500">*</span>
+            Delivery Action <span className="text-status-error">*</span>
           </Label>
           <div className="grid grid-cols-3 gap-2">
             <button
@@ -348,11 +348,11 @@ function InnerForm({
               onClick={() => setPublishMode("publish_now")}
               className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-xs font-medium transition-all ${
                 publishMode === "publish_now"
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold"
+                  ? "border-emerald-500 bg-evenvibe-light text-emerald-800 font-semibold"
                   : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
               }`}
             >
-              <Send className="h-4 w-4 mb-1 text-emerald-600" />
+              <Send className="h-4 w-4 mb-1 text-evenvibe-primary" />
               Publish Now
             </button>
 
@@ -434,9 +434,9 @@ function InnerForm({
           disabled={loading}
           className={
             publishMode === "publish_now"
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+              ? "bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
               : publishMode === "schedule"
-              ? "bg-blue-600 hover:bg-blue-700 text-white"
+              ? "bg-evenvibe-primary hover:bg-blue-700 text-white"
               : ""
           }
         >

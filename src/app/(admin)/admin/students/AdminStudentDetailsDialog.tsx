@@ -33,7 +33,10 @@ export function AdminStudentDetailsDialog({
 
   useEffect(() => {
     async function loadData() {
-      if (!studentId || !open) return;
+      if (!studentId || !open) {
+        setData(null);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -65,7 +68,7 @@ export function AdminStudentDetailsDialog({
             <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
           </div>
         ) : error ? (
-          <div className="p-4 bg-red-50 text-red-600 rounded-md">
+          <div className="p-4 bg-red-50 text-status-error rounded-md">
             {error}
           </div>
         ) : data?.student ? (
@@ -122,9 +125,16 @@ export function AdminStudentDetailsDialog({
                 </div>
               ) : (
                 <AdminSizeForm
+                  key={`${data.student.id}-${data.sizeRecord?.updated_at || "new"}`}
+                  student={data.student}
+                  activeStyles={data.activeStyles || []}
+                  sizeRecord={data.sizeRecord}
                   studentId={data.student.id}
                   config={data.config}
-                  sizeRecord={data.sizeRecord}
+                  lastYearSizes={data.lastYearSizes || {}}
+                  sizeHistory={data.sizeHistory || []}
+                  activeAcademicYear={data.activeAcademicYear}
+                  previousAcademicYear={data.previousAcademicYear}
                   onSuccess={handleSuccess}
                 />
               )}

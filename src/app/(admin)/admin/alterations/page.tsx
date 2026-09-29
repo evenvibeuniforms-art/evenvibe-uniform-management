@@ -29,6 +29,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { AdminAlterationDetailsDialog } from "./AdminAlterationDetailsDialog";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 import {
   getAdminAlterationsSummary,
   getAdminAlterationsList,
@@ -221,7 +222,7 @@ export default function AdminAlterationsPage() {
         );
       case "rework":
         return (
-          <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100 uppercase text-xs font-semibold">
+          <Badge className="bg-evenvibe-light text-evenvibe-deep border-evenvibe-light hover:bg-evenvibe-light uppercase text-xs font-semibold">
             Rework
           </Badge>
         );
@@ -291,7 +292,7 @@ export default function AdminAlterationsPage() {
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-blue-700">
               Requested
             </CardTitle>
-            <Clock className="h-4 w-4 text-blue-500" />
+            <Clock className="h-4 w-4 text-status-info" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-900">
@@ -306,28 +307,28 @@ export default function AdminAlterationsPage() {
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-amber-700">
               Under Review
             </CardTitle>
-            <AlertCircle className="h-4 w-4 text-amber-500" />
+            <AlertCircle className="h-4 w-4 text-status-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-900">
               {loadingSummary ? "..." : summary.under_review}
             </div>
-            <p className="text-[11px] text-amber-600 mt-0.5">In verification</p>
+            <p className="text-[11px] text-status-warning mt-0.5">In verification</p>
           </CardContent>
         </Card>
 
-        <Card className="border-purple-100 shadow-sm bg-purple-50/20">
+        <Card className="border-evenvibe-light shadow-sm bg-evenvibe-light/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-purple-700">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-evenvibe-deep">
               Approved / Rework
             </CardTitle>
-            <RotateCcw className="h-4 w-4 text-purple-500" />
+            <RotateCcw className="h-4 w-4 text-evenvibe-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-900">
+            <div className="text-2xl font-bold text-evenvibe-deep">
               {loadingSummary ? "..." : summary.approved_rework}
             </div>
-            <p className="text-[11px] text-purple-600 mt-0.5">Approved & active</p>
+            <p className="text-[11px] text-evenvibe-primary mt-0.5">Approved & active</p>
           </CardContent>
         </Card>
 
@@ -336,7 +337,7 @@ export default function AdminAlterationsPage() {
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-slate-600">
               Completed
             </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <CheckCircle2 className="h-4 w-4 text-evenvibe-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">
@@ -351,13 +352,13 @@ export default function AdminAlterationsPage() {
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-red-700">
               Rejected
             </CardTitle>
-            <XCircle className="h-4 w-4 text-red-500" />
+            <XCircle className="h-4 w-4 text-status-error" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-900">
               {loadingSummary ? "..." : summary.rejected}
             </div>
-            <p className="text-[11px] text-red-600 mt-0.5">Declined</p>
+            <p className="text-[11px] text-status-error mt-0.5">Declined</p>
           </CardContent>
         </Card>
       </div>
@@ -367,18 +368,18 @@ export default function AdminAlterationsPage() {
         <CardContent className="p-4 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Search Input */}
-            <div className="relative lg:col-span-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <div className="relative lg:col-span-1 w-full min-w-0">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
               <Input
                 placeholder="Search ID, order, student..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 text-sm"
+                className="pl-9 text-sm h-9 bg-white border-slate-200 w-full min-w-0"
               />
             </div>
 
             {/* School Filter */}
-            <div>
+            <div className="w-full min-w-0">
               <Select
                 value={selectedSchoolId}
                 onValueChange={(v) => {
@@ -386,11 +387,23 @@ export default function AdminAlterationsPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="School: All" />
+                <SelectTrigger className="w-full min-w-0 h-9 bg-white border-slate-200 text-sm justify-between">
+                  <SelectValue placeholder="All Schools" className="min-w-0 truncate text-left">
+                    {(val: unknown) => {
+                      const activeId = typeof val === "string" && val.length > 0 ? val : selectedSchoolId;
+                      if (!activeId || activeId === "all") return "All Schools";
+                      const found = schools.find((s) => s.id === activeId);
+                      const label = found ? found.name : (schools.length > 0 ? "Unknown School" : "All Schools");
+                      return (
+                        <span className="truncate block" title={label}>
+                          {label}
+                        </span>
+                      );
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">School: All Schools</SelectItem>
+                <SelectContent className="max-h-72 min-w-48">
+                  <SelectItem value="all">All Schools</SelectItem>
                   {schools.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.name}
@@ -401,7 +414,7 @@ export default function AdminAlterationsPage() {
             </div>
 
             {/* Status Filter */}
-            <div>
+            <div className="w-full min-w-0">
               <Select
                 value={statusFilter}
                 onValueChange={(v) => {
@@ -409,8 +422,8 @@ export default function AdminAlterationsPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Status: All" />
+                <SelectTrigger className="w-full min-w-0 h-9 bg-white border-slate-200 text-sm justify-between">
+                  <SelectValue placeholder="Status: All" className="min-w-0 truncate text-left" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Status: All</SelectItem>
@@ -425,7 +438,7 @@ export default function AdminAlterationsPage() {
             </div>
 
             {/* Reason Filter */}
-            <div>
+            <div className="w-full min-w-0">
               <Select
                 value={reasonFilter}
                 onValueChange={(v) => {
@@ -433,8 +446,8 @@ export default function AdminAlterationsPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Reason: All" />
+                <SelectTrigger className="w-full min-w-0 h-9 bg-white border-slate-200 text-sm justify-between">
+                  <SelectValue placeholder="Reason: All" className="min-w-0 truncate text-left" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Reason: All</SelectItem>
@@ -448,7 +461,7 @@ export default function AdminAlterationsPage() {
             </div>
 
             {/* Date Range Filter */}
-            <div>
+            <div className="w-full min-w-0">
               <Select
                 value={dateFilter}
                 onValueChange={(v) => {
@@ -456,8 +469,8 @@ export default function AdminAlterationsPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Date: All" />
+                <SelectTrigger className="w-full min-w-0 h-9 bg-white border-slate-200 text-sm justify-between">
+                  <SelectValue placeholder="Date: All" className="min-w-0 truncate text-left" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Date: All</SelectItem>
@@ -483,7 +496,7 @@ export default function AdminAlterationsPage() {
         <CardContent className="p-0">
           {loadingList ? (
             <div className="py-16 flex flex-col items-center justify-center text-slate-500 gap-2">
-              <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+              <Loader2 className="h-6 w-6 animate-spin text-evenvibe-primary" />
               <span className="text-sm">Loading alteration requests...</span>
             </div>
           ) : alterations.length === 0 ? (
@@ -497,92 +510,154 @@ export default function AdminAlterationsPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Request ID</th>
-                    <th className="px-4 py-3 font-semibold">School</th>
-                    <th className="px-4 py-3 font-semibold">Order Number</th>
-                    <th className="px-4 py-3 font-semibold">Student</th>
-                    <th className="px-4 py-3 font-semibold">Item & Sizes</th>
-                    <th className="px-4 py-3 font-semibold">Reason</th>
-                    <th className="px-4 py-3 font-semibold text-center">Qty</th>
-                    <th className="px-4 py-3 font-semibold">Status</th>
-                    <th className="px-4 py-3 font-semibold">Requested Date</th>
-                    <th className="px-4 py-3 font-semibold text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {alterations.map((alt) => (
-                    <tr key={alt.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
-                        {alt.request_number}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <School className="h-3.5 w-3.5 text-slate-400" />
-                          <span>{alt.school?.name || "-"}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
-                        {alt.order?.order_number || "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">
-                          {alt.student?.student_name || "-"}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {alt.student ? `${alt.student.class_name}-${alt.student.section}` : ""}{" "}
-                          {alt.student?.admission_number ? `(${alt.student.admission_number})` : ""}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="font-semibold text-slate-800 capitalize">{alt.item_name}</div>
-                        {alt.required_size && (
-                          <div className="text-xs text-emerald-700 font-semibold">
-                            Req: {alt.required_size}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">
-                        {alt.issue_type}
-                      </td>
-                      <td className="px-4 py-3 text-center font-bold text-slate-800">
-                        {alt.quantity}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {renderStatusBadge(alt.status)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
-                        {formatDate(alt.created_at)}
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenDetails(alt.id)}
-                          className="h-8 px-2.5 font-medium text-xs gap-1 border-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          Review
-                        </Button>
-                      </td>
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold">Request ID</th>
+                      <th className="px-4 py-3 font-semibold">School</th>
+                      <th className="px-4 py-3 font-semibold">Order Number</th>
+                      <th className="px-4 py-3 font-semibold">Student</th>
+                      <th className="px-4 py-3 font-semibold">Item & Sizes</th>
+                      <th className="px-4 py-3 font-semibold">Reason</th>
+                      <th className="px-4 py-3 font-semibold text-center">Qty</th>
+                      <th className="px-4 py-3 font-semibold">Status</th>
+                      <th className="px-4 py-3 font-semibold">Requested Date</th>
+                      <th className="px-4 py-3 font-semibold text-right">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {alterations.map((alt) => (
+                      <tr key={alt.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
+                          {alt.request_number}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <School className="h-3.5 w-3.5 text-slate-400" />
+                            <span>{alt.school?.name || "Unknown School"}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
+                          {alt.order?.order_number || "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">
+                            {alt.student?.student_name || "-"}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {alt.student ? `${alt.student.class_name}-${alt.student.section}` : ""}{" "}
+                            {alt.student?.admission_number ? `(${alt.student.admission_number})` : ""}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="font-semibold text-slate-800 capitalize">{alt.item_name}</div>
+                          {alt.required_size && (
+                            <div className="text-xs text-evenvibe-deep font-semibold">
+                              Req: {alt.required_size}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">
+                          {alt.issue_type}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-slate-800">
+                          {alt.quantity}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {renderStatusBadge(alt.status)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
+                          {formatDate(alt.created_at)}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenDetails(alt.id)}
+                            className="h-8 px-2.5 font-medium text-xs gap-1 border-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Review
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View */}
+              <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+                {alterations.map((alt) => (
+                  <MobileCard key={alt.id}>
+                    <MobileCardField label="Request ID" value={<span className="font-bold text-slate-900">{alt.request_number}</span>} />
+                    <MobileCardField
+                      label="School"
+                      value={
+                        <div className="flex items-center gap-1.5 font-medium text-slate-900">
+                          <School className="h-3.5 w-3.5 text-slate-400" />
+                          <span>{alt.school?.name || "Unknown School"}</span>
+                        </div>
+                      }
+                    />
+                    <MobileCardField label="Order Number" value={alt.order?.order_number || "-"} />
+                    <MobileCardField
+                      label="Student"
+                      value={
+                        <div>
+                          <div className="font-medium text-slate-900">{alt.student?.student_name || "-"}</div>
+                          <div className="text-xs text-slate-400">
+                            {alt.student ? `${alt.student.class_name}-${alt.student.section}` : ""}{" "}
+                            {alt.student?.admission_number ? `(${alt.student.admission_number})` : ""}
+                          </div>
+                        </div>
+                      }
+                    />
+                    <MobileCardField
+                      label="Item & Sizes"
+                      value={
+                        <div>
+                          <div className="font-semibold text-slate-800 capitalize">{alt.item_name}</div>
+                          {alt.required_size && (
+                            <div className="text-xs text-evenvibe-deep font-semibold">
+                              Req: {alt.required_size}
+                            </div>
+                          )}
+                        </div>
+                      }
+                    />
+                    <MobileCardField label="Reason" value={alt.issue_type} />
+                    <MobileCardField label="Quantity" value={<span className="font-bold text-slate-900">{alt.quantity}</span>} />
+                    <MobileCardField label="Status" value={renderStatusBadge(alt.status)} />
+                    <MobileCardField label="Requested Date" value={formatDate(alt.created_at)} />
+                    <MobileCardActions label="Action">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenDetails(alt.id)}
+                        className="w-full h-8 px-3 font-medium text-xs gap-1.5 border-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 justify-center"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        Review Request
+                      </Button>
+                    </MobileCardActions>
+                  </MobileCard>
+                ))}
+              </div>
+            </>
           )}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
+            <div className="flex flex-col sm:flex-row gap-2 items-center justify-between px-4 py-3 border-t bg-slate-50/50">
               <div className="text-xs text-slate-500">
                 Showing page <span className="font-semibold">{page}</span> of{" "}
                 <span className="font-semibold">{totalPages}</span> ({totalCount} total)
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <Button
                   variant="outline"
                   size="sm"

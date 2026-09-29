@@ -69,7 +69,7 @@ export default function QuickActions() {
     <Card className="border border-slate-200/80 shadow-xs bg-white">
       <CardContent className="p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-4 h-4 text-emerald-600" />
+          <Zap className="w-4 h-4 text-evenvibe-primary" />
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             Quick Actions
           </h2>

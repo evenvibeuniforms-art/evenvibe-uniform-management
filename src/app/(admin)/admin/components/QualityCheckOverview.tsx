@@ -17,7 +17,7 @@ export default function QualityCheckOverview({ data }: QualityCheckOverviewProps
         <CardHeader className="pb-3 flex flex-row items-center justify-between border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
-              <ClipboardCheck className="w-5 h-5 text-purple-600" />
+              <ClipboardCheck className="w-5 h-5 text-evenvibe-primary" />
               <CardTitle className="text-base font-semibold text-slate-900">
                 Quality Check
               </CardTitle>
@@ -28,7 +28,7 @@ export default function QualityCheckOverview({ data }: QualityCheckOverviewProps
           </div>
           <Link
             href="/admin/quality-check"
-            className="text-xs font-medium text-purple-600 hover:text-purple-700 flex items-center gap-0.5 hover:underline"
+            className="text-xs font-medium text-evenvibe-primary hover:text-evenvibe-deep flex items-center gap-0.5 hover:underline"
           >
             Details
             <ArrowRight className="w-3 h-3" />
@@ -38,9 +38,9 @@ export default function QualityCheckOverview({ data }: QualityCheckOverviewProps
         <CardContent className="pt-4 space-y-3">
           <div className="grid grid-cols-2 gap-2.5">
             {/* Pending */}
-            <div className="p-3 rounded-lg bg-purple-50/60 border border-purple-200/60">
-              <div className="flex items-center gap-1.5 text-xs text-purple-800 font-medium">
-                <Clock className="w-3.5 h-3.5 text-purple-600" />
+            <div className="p-3 rounded-lg bg-evenvibe-light/60 border border-evenvibe-light/60">
+              <div className="flex items-center gap-1.5 text-xs text-evenvibe-deep font-medium">
+                <Clock className="w-3.5 h-3.5 text-evenvibe-primary" />
                 Pending
               </div>
               <div className="text-xl font-bold text-slate-900 mt-1">
@@ -68,7 +68,7 @@ export default function QualityCheckOverview({ data }: QualityCheckOverviewProps
             {/* Passed */}
             <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-200/60">
               <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-evenvibe-primary" />
                 Passed
               </div>
               <div className="text-xl font-bold text-slate-900 mt-1">
@@ -82,7 +82,7 @@ export default function QualityCheckOverview({ data }: QualityCheckOverviewProps
             {/* Failed */}
             <div className="p-3 rounded-lg bg-rose-50/60 border border-rose-200/60">
               <div className="flex items-center gap-1.5 text-xs text-rose-800 font-medium">
-                <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                <AlertCircle className="w-3.5 h-3.5 text-status-error" />
                 Failed
               </div>
               <div className="text-xl font-bold text-slate-900 mt-1">
@@ -106,7 +106,7 @@ export default function QualityCheckOverview({ data }: QualityCheckOverviewProps
         <span className="text-slate-500">Total QC records: {totalQC}</span>
         <Link
           href="/admin/quality-check"
-          className="text-purple-700 font-medium hover:underline inline-flex items-center gap-1"
+          className="text-evenvibe-deep font-medium hover:underline inline-flex items-center gap-1"
         >
           Open QC Module
           <ArrowRight className="w-3 h-3" />

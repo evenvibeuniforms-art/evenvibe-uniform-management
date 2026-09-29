@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Eye, Search, FileText } from "lucide-react";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 export interface AdminOrderListItem {
   id: string;
@@ -164,12 +165,12 @@ export default function AdminOrdersListView({
     switch (s) {
       case "submitted": return "bg-blue-100 text-blue-800 border-blue-200";
       case "under_review": return "bg-amber-100 text-amber-800 border-amber-200";
-      case "confirmed": return "bg-indigo-100 text-indigo-800 border-indigo-200";
-      case "production": return "bg-purple-100 text-purple-800 border-purple-200";
+      case "confirmed": return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
+      case "production": return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
       case "quality_check": return "bg-pink-100 text-pink-800 border-pink-200";
       case "packed": return "bg-orange-100 text-orange-800 border-orange-200";
       case "dispatched": return "bg-cyan-100 text-cyan-800 border-cyan-200";
-      case "in_transit": return "bg-teal-100 text-teal-800 border-teal-200";
+      case "in_transit": return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
       case "delivered": return "bg-emerald-100 text-emerald-800 border-emerald-200";
       default: return "bg-slate-100 text-slate-800";
     }
@@ -206,16 +207,28 @@ export default function AdminOrdersListView({
                 />
               </div>
             </div>
-            <div className="w-full md:w-[250px]">
+            <div className="w-full md:w-[250px] min-w-0">
               <Select value={schoolId || "all_schools"} onValueChange={(val: string | null) => {
                 const newVal = val === "all_schools" || !val ? "" : val;
                 setSchoolId(newVal); 
                 applyFilters({ schoolId: newVal }); 
               }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Schools" />
+                <SelectTrigger className="w-full min-w-0 h-9 bg-white border-slate-200 text-sm justify-between">
+                  <SelectValue placeholder="All Schools" className="min-w-0 truncate text-left">
+                    {(val: unknown) => {
+                      const activeId = typeof val === "string" && val.length > 0 ? val : (schoolId || "all_schools");
+                      if (!activeId || activeId === "all_schools") return "All Schools";
+                      const found = schools.find((s) => s.id === activeId);
+                      const label = found ? found.name : (schools.length > 0 ? "Unknown School" : "All Schools");
+                      return (
+                        <span className="truncate block" title={label}>
+                          {label}
+                        </span>
+                      );
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-72 min-w-48">
                   <SelectItem value="all_schools">All Schools</SelectItem>
                   {schools.map((school) => (
                     <SelectItem key={school.id} value={school.id}>
@@ -249,70 +262,117 @@ export default function AdminOrdersListView({
           </div>
 
           <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="cursor-pointer hover:bg-slate-50" onClick={() => handleSort("order_number")}>
-                    Order Number {initialSort === "order_number" && (initialOrder === "asc" ? "↑" : "↓")}
-                  </TableHead>
-                  <TableHead>School</TableHead>
-                  <TableHead className="cursor-pointer hover:bg-slate-50" onClick={() => handleSort("created_at")}>
-                    Submitted Date {initialSort === "created_at" && (initialOrder === "asc" ? "↑" : "↓")}
-                  </TableHead>
-                  <TableHead>Total Qty</TableHead>
-                  <TableHead className="cursor-pointer hover:bg-slate-50" onClick={() => handleSort("status")}>
-                    Status {initialSort === "status" && (initialOrder === "asc" ? "↑" : "↓")}
-                  </TableHead>
-                  <TableHead className="cursor-pointer hover:bg-slate-50" onClick={() => handleSort("updated_at")}>
-                    Last Updated {initialSort === "updated_at" && (initialOrder === "asc" ? "↑" : "↓")}
-                  </TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.length === 0 ? (
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
-                      No orders found.
-                    </TableCell>
+                    <TableHead className="cursor-pointer hover:bg-slate-50" onClick={() => handleSort("order_number")}>
+                      Order Number {initialSort === "order_number" && (initialOrder === "asc" ? "↑" : "↓")}
+                    </TableHead>
+                    <TableHead>School</TableHead>
+                    <TableHead className="cursor-pointer hover:bg-slate-50" onClick={() => handleSort("created_at")}>
+                      Submitted Date {initialSort === "created_at" && (initialOrder === "asc" ? "↑" : "↓")}
+                    </TableHead>
+                    <TableHead>Total Qty</TableHead>
+                    <TableHead className="cursor-pointer hover:bg-slate-50" onClick={() => handleSort("status")}>
+                      Status {initialSort === "status" && (initialOrder === "asc" ? "↑" : "↓")}
+                    </TableHead>
+                    <TableHead className="cursor-pointer hover:bg-slate-50" onClick={() => handleSort("updated_at")}>
+                      Last Updated {initialSort === "updated_at" && (initialOrder === "asc" ? "↑" : "↓")}
+                    </TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ) : (
-                  orders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
+                </TableHeader>
+                <TableBody>
+                  {orders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-24 text-center">
+                        No orders found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    orders.map((order) => (
+                      <TableRow key={order.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-slate-400" />
+                            {order.orderNumber}
+                          </div>
+                        </TableCell>
+                        <TableCell>{order.schoolName}</TableCell>
+                        <TableCell>{formatDate(order.createdAt)}</TableCell>
+                        <TableCell>{order.totalQuantity}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={getStatusColor(order.status)}>
+                            {formatStatus(order.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{formatDate(order.updatedAt, true)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => router.push(`/admin/orders/${order.id}`)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+              {orders.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-sm">No orders found.</div>
+              ) : (
+                orders.map((order) => (
+                  <MobileCard key={order.id}>
+                    <MobileCardField
+                      label="Order Number"
+                      value={
+                        <div className="flex items-center gap-1.5 font-semibold text-slate-900">
                           <FileText className="h-4 w-4 text-slate-400" />
                           {order.orderNumber}
                         </div>
-                      </TableCell>
-                      <TableCell>{order.schoolName}</TableCell>
-                      <TableCell>{formatDate(order.createdAt)}</TableCell>
-                      <TableCell>{order.totalQuantity}</TableCell>
-                      <TableCell>
+                      }
+                    />
+                    <MobileCardField label="School" value={order.schoolName} />
+                    <MobileCardField label="Submitted Date" value={formatDate(order.createdAt)} />
+                    <MobileCardField label="Total Qty" value={<span className="font-semibold text-slate-900">{order.totalQuantity}</span>} />
+                    <MobileCardField
+                      label="Status"
+                      value={
                         <Badge variant="outline" className={getStatusColor(order.status)}>
                           {formatStatus(order.status)}
                         </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(order.updatedAt, true)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => router.push(`/admin/orders/${order.id}`)}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          View
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                      }
+                    />
+                    <MobileCardField label="Last Updated" value={formatDate(order.updatedAt, true)} />
+                    <MobileCardActions label="Action">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/admin/orders/${order.id}`)}
+                        className="w-full text-evenvibe-primary border-emerald-200 hover:bg-emerald-50 h-8 gap-1.5 justify-center"
+                      >
+                        <Eye className="h-4 w-4" />
+                        View Order
+                      </Button>
+                    </MobileCardActions>
+                  </MobileCard>
+                ))
+              )}
+            </div>
           </div>
           
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
+            <div className="flex flex-col sm:flex-row gap-2 items-center justify-between mt-4">
               <div className="text-sm text-muted-foreground">
                 Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} orders
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
                 <Button
                   variant="outline"
                   size="sm"

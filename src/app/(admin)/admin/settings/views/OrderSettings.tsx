@@ -27,23 +27,23 @@ export function OrderSettings({ orderStatuses }: OrderSettingsProps) {
       case "submitted":
         return <FileText className="h-4 w-4 text-blue-600" />;
       case "under_review":
-        return <Search className="h-4 w-4 text-amber-600" />;
+        return <Search className="h-4 w-4 text-status-warning" />;
       case "confirmed":
-        return <CheckCircle className="h-4 w-4 text-emerald-600" />;
+        return <CheckCircle className="h-4 w-4 text-evenvibe-primary" />;
       case "production":
-        return <Factory className="h-4 w-4 text-indigo-600" />;
+        return <Factory className="h-4 w-4 text-evenvibe-primary" />;
       case "quality_check":
-        return <ClipboardCheck className="h-4 w-4 text-purple-600" />;
+        return <ClipboardCheck className="h-4 w-4 text-evenvibe-primary" />;
       case "packed":
-        return <Package className="h-4 w-4 text-cyan-600" />;
+        return <Package className="h-4 w-4 text-status-info" />;
       case "dispatched":
-        return <Truck className="h-4 w-4 text-orange-600" />;
+        return <Truck className="h-4 w-4 text-status-warning" />;
       case "in_transit":
-        return <MapPin className="h-4 w-4 text-sky-600" />;
+        return <MapPin className="h-4 w-4 text-status-info" />;
       case "delivered":
-        return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+        return <CheckCircle2 className="h-4 w-4 text-evenvibe-primary" />;
       case "cancelled":
-        return <XCircle className="h-4 w-4 text-rose-600" />;
+        return <XCircle className="h-4 w-4 text-status-error" />;
       default:
         return <FileText className="h-4 w-4 text-slate-600" />;
     }
@@ -63,7 +63,7 @@ export function OrderSettings({ orderStatuses }: OrderSettingsProps) {
       <div className="space-y-4">
         {/* Notice alert */}
         <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-900">
-          <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <ShieldAlert className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
           <p className="leading-relaxed">
             Order lifecycle statuses are core business rules. Modifying or deleting stages is
             restricted to ensure complete data consistency across Production, Quality Check,
@@ -97,7 +97,7 @@ export function OrderSettings({ orderStatuses }: OrderSettingsProps) {
                   variant="outline"
                   className={
                     stage.cancellationAllowed
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"
+                      ? "bg-evenvibe-light text-evenvibe-deep border-emerald-200 text-[10px]"
                       : "bg-slate-100 text-slate-500 border-slate-200 text-[10px]"
                   }
                 >

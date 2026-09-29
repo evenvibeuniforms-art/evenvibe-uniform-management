@@ -149,26 +149,43 @@ async function getSchoolConfig(schoolId: string, supabase: Awaited<ReturnType<ty
     return { configMap: configCache[schoolId].map, itemsByGender: configCache[schoolId].items };
   }
 
-  const { data: configs } = await supabase
-    .from("school_uniform_configurations")
-    .select(`
-      gender,
-      items:school_uniform_configuration_items (
-        id, item_name
-      )
-    `)
-    .eq("school_id", schoolId);
+  const [configsRes, stylesRes] = await Promise.all([
+    supabase
+      .from("school_uniform_configurations")
+      .select(`
+        gender,
+        items:school_uniform_configuration_items (
+          id, item_name
+        )
+      `)
+      .eq("school_id", schoolId),
+    supabase
+      .from("uniform_styles")
+      .select("id, item_name, gender")
+      .eq("school_id", schoolId),
+  ]);
 
   const configMap: Record<string, { gender: string; item_name: string }> = {};
   const itemsByGender: Record<string, { id: string, item_name: string }[]> = {};
 
-  (configs || []).forEach((conf: { gender?: string, items?: unknown }) => {
+  (configsRes.data || []).forEach((conf: { gender?: string, items?: unknown }) => {
     const gender = conf.gender || "Unassigned";
     const items = (Array.isArray(conf.items) ? conf.items : [conf.items]).filter(Boolean) as { id: string, item_name: string }[];
     itemsByGender[gender] = items;
     items.forEach(item => {
       configMap[item.id] = { gender, item_name: item.item_name };
     });
+  });
+
+  (stylesRes.data || []).forEach((st) => {
+    const genders = (!st.gender || st.gender === "All") ? ["Male", "Female"] : [st.gender];
+    genders.forEach((g) => {
+      if (!itemsByGender[g]) itemsByGender[g] = [];
+      if (!itemsByGender[g].some((i) => i.id === st.id)) {
+        itemsByGender[g].push({ id: st.id, item_name: st.item_name });
+      }
+    });
+    configMap[st.id] = { gender: st.gender || "All", item_name: st.item_name };
   });
 
   configCache[schoolId] = { map: configMap, items: itemsByGender };

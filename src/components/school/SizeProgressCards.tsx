@@ -62,7 +62,7 @@ export function SizeProgressCards({ students }: SizeProgressCardsProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Sizes Collected</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <CheckCircle2 className="h-4 w-4 text-status-success" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{completedSizes}</div>
@@ -71,7 +71,7 @@ export function SizeProgressCards({ students }: SizeProgressCardsProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pending Sizes</CardTitle>
-            <Clock className="h-4 w-4 text-amber-500" />
+            <Clock className="h-4 w-4 text-status-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pendingSizes}</div>
@@ -80,7 +80,7 @@ export function SizeProgressCards({ students }: SizeProgressCardsProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Collection Progress</CardTitle>
-            <Ruler className="h-4 w-4 text-indigo-500" />
+            <Ruler className="h-4 w-4 text-evenvibe-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{progressPercentage}%</div>
@@ -102,8 +102,8 @@ export function SizeProgressCards({ students }: SizeProgressCardsProps) {
                 <p className="text-sm text-slate-500">{regularStudents.length} selected</p>
               </div>
               <div className="text-right">
-                <p className="font-medium text-emerald-600">{regularCompleted} Complete</p>
-                <p className="text-sm text-amber-600">{regularPending} Pending</p>
+                <p className="font-medium text-evenvibe-primary">{regularCompleted} Complete</p>
+                <p className="text-sm text-status-warning">{regularPending} Pending</p>
               </div>
             </div>
             <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -112,8 +112,8 @@ export function SizeProgressCards({ students }: SizeProgressCardsProps) {
                 <p className="text-sm text-slate-500">{tshirtStudents.length} selected</p>
               </div>
               <div className="text-right">
-                <p className="font-medium text-emerald-600">{tshirtCompleted} Complete</p>
-                <p className="text-sm text-amber-600">{tshirtPending} Pending</p>
+                <p className="font-medium text-evenvibe-primary">{tshirtCompleted} Complete</p>
+                <p className="text-sm text-status-warning">{tshirtPending} Pending</p>
               </div>
             </div>
           </CardContent>

@@ -112,7 +112,7 @@ export function UserDetailsDialog({
                   variant="outline"
                   className={
                     isEvenViveAdmin
-                      ? "bg-purple-50 text-purple-700 border-purple-200 font-medium"
+                      ? "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light font-medium"
                       : "bg-blue-50 text-blue-700 border-blue-200 font-medium"
                   }
                 >
@@ -144,7 +144,7 @@ export function UserDetailsDialog({
             <div className="rounded-md border bg-slate-50 p-3.5 space-y-2 text-sm">
               {isEvenViveAdmin ? (
                 <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-purple-600" />
+                  <Shield className="h-4 w-4 text-evenvibe-primary" />
                   <span className="font-medium text-slate-900">EvenVive Central Admin</span>
                   <span className="text-xs text-slate-500">(Not bound to a single school)</span>
                 </div>
@@ -183,7 +183,7 @@ export function UserDetailsDialog({
                 <span className="text-slate-500 flex items-center gap-1.5">
                   <KeyRound className="h-3.5 w-3.5" /> Password Authentication
                 </span>
-                <span className="text-xs text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                <span className="text-xs text-evenvibe-deep font-medium bg-evenvibe-light px-2 py-0.5 rounded border border-emerald-200">
                   Secured via Supabase Auth
                 </span>
               </div>
@@ -192,12 +192,12 @@ export function UserDetailsDialog({
                   Email Verification
                 </span>
                 {user.emailConfirmedAt ? (
-                  <span className="inline-flex items-center text-xs text-emerald-700 font-medium">
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Confirmed
+                  <span className="inline-flex items-center text-xs text-evenvibe-deep font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-evenvibe-primary" /> Confirmed
                   </span>
                 ) : (
                   <span className="inline-flex items-center text-xs text-amber-700 font-medium">
-                    <XCircle className="h-3.5 w-3.5 mr-1 text-amber-600" /> Unconfirmed
+                    <XCircle className="h-3.5 w-3.5 mr-1 text-status-warning" /> Unconfirmed
                   </span>
                 )}
               </div>

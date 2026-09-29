@@ -107,15 +107,27 @@ export function UserFilters({ filters, schools }: UserFiltersProps) {
         </div>
 
         {/* School filter */}
-        <div className="w-full md:w-56">
+        <div className="w-full md:w-56 min-w-0">
           <Select
             value={filters.schoolId}
             onValueChange={(val) => updateQuery({ school: val, page: "1" })}
           >
-            <SelectTrigger className="w-full bg-slate-50 border-slate-200 truncate">
-              <SelectValue placeholder="All Schools" />
+            <SelectTrigger className="w-full min-w-0 h-9 bg-slate-50 border-slate-200 justify-between text-sm">
+              <SelectValue placeholder="All Schools" className="min-w-0 truncate text-left">
+                {(val: unknown) => {
+                  const activeId = typeof val === "string" && val.length > 0 ? val : filters.schoolId;
+                  if (!activeId || activeId === "all") return "All Schools";
+                  const found = schools.find((s) => s.id === activeId);
+                  const label = found ? `${found.name} (${found.school_code})` : (schools.length > 0 ? "Unknown School" : "All Schools");
+                  return (
+                    <span className="truncate block" title={label}>
+                      {label}
+                    </span>
+                  );
+                }}
+              </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-72 min-w-48">
               <SelectItem value="all">All Schools</SelectItem>
               {schools.map((s) => (
                 <SelectItem key={s.id} value={s.id}>

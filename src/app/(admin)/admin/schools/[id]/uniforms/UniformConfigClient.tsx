@@ -211,7 +211,7 @@ export function UniformConfigClient({ schoolId, gender, initialItems, initialCla
                   </div>
                 </div>
                 <div className="flex sm:flex-col justify-end gap-2 mt-4 sm:mt-0 pt-4 sm:pt-0 border-t sm:border-t-0 sm:border-l pl-0 sm:pl-4 sm:w-12 items-center">
-                  <Button variant="ghost" size="icon" onClick={() => removeItem(index)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                  <Button variant="ghost" size="icon" onClick={() => removeItem(index)} className="text-status-error hover:text-red-700 hover:bg-red-50">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -224,8 +224,8 @@ export function UniformConfigClient({ schoolId, gender, initialItems, initialCla
         </Button>
       </CardContent>
       <CardFooter className="flex flex-col items-start gap-4 bg-slate-50 rounded-b-xl border-t mt-4 p-6">
-        {error && <div className="text-sm font-medium text-red-600">{error}</div>}
-        {success && <div className="text-sm font-medium text-emerald-600">{success}</div>}
+        {error && <div className="text-sm font-medium text-status-error">{error}</div>}
+        {success && <div className="text-sm font-medium text-evenvibe-primary">{success}</div>}
         <div className="flex justify-between w-full">
           <div className="text-sm text-slate-500 pt-2 flex items-center gap-2">
             {onCancel && (

@@ -14,7 +14,7 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
 
   if (error) {
     return (
-      <div className="p-12 text-center text-red-500 max-w-lg mx-auto bg-red-50 rounded-xl mt-8">
+      <div className="p-12 text-center text-status-error max-w-lg mx-auto bg-red-50 rounded-xl mt-8">
         <AlertCircle className="mx-auto h-12 w-12 mb-4" />
         <h2 className="text-xl font-bold mb-2">Error</h2>
         <p>{error}</p>
@@ -34,7 +34,7 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
         </p>
         <div className="flex gap-4">
           <Link href="/school/orders">
-            <Button className="bg-emerald-600 hover:bg-emerald-700">Go to My Orders</Button>
+            <Button className="bg-evenvibe-primary hover:bg-evenvibe-deep">Go to My Orders</Button>
           </Link>
         </div>
       </div>

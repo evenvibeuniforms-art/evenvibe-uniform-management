@@ -3,7 +3,6 @@
 import { requireAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { UniformConfigSchema, validateDuplicateItemNames } from "@/lib/validations/uniform-config";
 
 export type UniformItemDraft = {
   id?: string;
@@ -13,130 +12,30 @@ export type UniformItemDraft = {
   sort_order: number;
 };
 
+/**
+ * DEPRECATED: Legacy Uniform Configuration is retired.
+ * All new uniform configuration must be created in Uniform Designs (/admin/uniform-designs).
+ */
 export async function saveUniformConfiguration(
-  schoolId: string,
-  gender: "Male" | "Female",
-  items: UniformItemDraft[],
-  targetClasses: string[],
-  configId?: string
-) {
-  try {
-    await requireAdmin();
-    const supabase = await createClient();
-
-    // 1. Validation: School ID
-    if (!schoolId || typeof schoolId !== "string") {
-      return { error: "Invalid school ID." };
-    }
-
-    // 2. Zod Validation for config and items
-    const result = UniformConfigSchema.safeParse({
-      gender,
-      targetClasses,
-      items
-    });
-
-    if (!result.success) {
-      return { error: result.error.issues[0].message };
-    }
-
-    // 3. Custom Item Name Duplication Validation
-    const duplicateError = validateDuplicateItemNames(result.data.items);
-    if (duplicateError) {
-      return { error: duplicateError };
-    }
-
-    // 5. Pre-check for Overlaps to provide a clear, comprehensive error message
-    let query = supabase
-      .from('school_uniform_configurations')
-      .select('id, school_uniform_configuration_classes(class_name)')
-      .eq('school_id', schoolId)
-      .eq('gender', gender)
-      .eq('is_active', true);
-      
-    if (configId) {
-      query = query.neq('id', configId);
-    }
-    
-    const { data: existingConfigs, error: overlapError } = await query;
-    
-    if (overlapError) {
-      console.error("[saveUniformConfiguration] overlap pre-check failed", {
-        message: overlapError.message,
-        code: overlapError.code,
-        details: overlapError.details,
-        hint: overlapError.hint,
-      });
-      return { error: `Failed to validate configuration overlaps: ${overlapError.message}` };
-    }
-    
-    const overlappingClasses: string[] = [];
-    if (existingConfigs) {
-      for (const config of existingConfigs) {
-        const classes = config.school_uniform_configuration_classes as unknown as { class_name: string }[];
-        if (classes && Array.isArray(classes)) {
-          for (const cls of classes) {
-            if (targetClasses.includes(cls.class_name)) {
-              overlappingClasses.push(cls.class_name);
-            }
-          }
-        }
-      }
-    }
-    
-    if (overlappingClasses.length > 0) {
-      const uniqueOverlaps = Array.from(new Set(overlappingClasses));
-      const classStr = uniqueOverlaps.length === 1 
-        ? `${uniqueOverlaps[0]} is` 
-        : `${uniqueOverlaps.join(', ')} are`;
-        
-      return { error: `Configuration conflict: ${classStr} already assigned to another active ${gender} configuration.` };
-    }
-
-    // 6. Build RPC arguments dynamically to avoid null casting issues
-    const rpcArgs: { p_school_id: string; p_gender: string; p_target_classes: string[]; p_config_id?: string; p_items?: unknown } = {
-      p_school_id: schoolId,
-      p_gender: gender,
-      p_target_classes: targetClasses,
-      p_items: items.map((item, index) => ({
-        id: item.id || null,
-        item_name: item.item_name,
-        available_sizes: item.available_sizes,
-        is_required: item.is_required,
-        sort_order: index
-      }))
-    };
-    if (configId) {
-      rpcArgs.p_config_id = configId;
-    }
-
-    // 6. Execute RPC for transactional save & overlap check
-    const { data: finalConfigId, error: rpcError } = await supabase
-      .rpc('save_uniform_configuration', rpcArgs);
-
-    if (rpcError) {
-      // Return safe user-facing message for known errors
-      if (rpcError.message?.includes("Configuration conflict")) {
-        return { error: rpcError.message }; // Keep the specific overlap message from Postgres
-      }
-      if (rpcError.message?.includes("schema cache") || rpcError.code === "PGRST202") {
-        return { error: "Uniform configuration service is unavailable. Please try again (Schema Cache/RPC Error)." };
-      }
-      return { error: rpcError.message || "An error occurred while saving the configuration." };
-    }
-
-    if (!finalConfigId) {
-      return { error: "Failed to get configuration ID from database." };
-    }
-
-    revalidatePath(`/admin/schools/${schoolId}/uniforms`);
-    return { success: "Configuration saved successfully." };
-
-  } catch (error: unknown) {
-    return { error: error instanceof Error ? error.message : "An unexpected error occurred." };
-  }
+  _schoolId: string,
+  _gender: "Male" | "Female",
+  _items: UniformItemDraft[],
+  _targetClasses: string[],
+  _configId?: string
+): Promise<{ success?: string; error?: string }> {
+  void _schoolId;
+  void _gender;
+  void _items;
+  void _targetClasses;
+  void _configId;
+  return {
+    error: "Legacy Uniform Configuration is retired. Please use Uniform Designs at /admin/uniform-designs to configure uniform styles.",
+  };
 }
 
+/**
+ * Historical helper to deactivate a legacy uniform configuration if needed.
+ */
 export async function deactivateUniformConfiguration(configId: string, schoolId: string) {
   try {
     await requireAdmin();
@@ -169,9 +68,9 @@ export async function deactivateUniformConfiguration(configId: string, schoolId:
     }
 
     // 2. Soft deactivate via secure RPC
-    const { error: rpcError } = await supabase.rpc('deactivate_uniform_configuration', {
+    const { error: rpcError } = await supabase.rpc("deactivate_uniform_configuration", {
       p_config_id: configId,
-      p_school_id: schoolId
+      p_school_id: schoolId,
     });
 
     if (rpcError) {
@@ -181,16 +80,15 @@ export async function deactivateUniformConfiguration(configId: string, schoolId:
         details: rpcError.details,
         hint: rpcError.hint,
       });
-      
+
       if (rpcError.message?.includes("Unauthorized") || rpcError.message?.includes("not found")) {
-         return { error: rpcError.message };
+        return { error: rpcError.message };
       }
       return { error: "Failed to deactivate configuration." };
     }
 
     revalidatePath(`/admin/schools/${schoolId}/uniforms`);
     return { success: "Configuration deactivated successfully." };
-
   } catch (error: unknown) {
     return { error: error instanceof Error ? error.message : "An unexpected error occurred." };
   }

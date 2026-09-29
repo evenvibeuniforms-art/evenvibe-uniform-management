@@ -225,7 +225,7 @@ export default function AdminReportsView({
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-emerald-600" />
+            <BarChart3 className="h-6 w-6 text-evenvibe-primary" />
             Reports & Analytics
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -249,13 +249,25 @@ export default function AdminReportsView({
               />
 
               {/* School Filter */}
-              <div className="flex items-center gap-1.5">
-                <Building2 className="h-4 w-4 text-slate-400" />
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
                 <Select value={schoolId} onValueChange={handleSchoolChange}>
-                  <SelectTrigger className="w-[180px] h-9 text-xs bg-white">
-                    <SelectValue placeholder="All Schools" />
+                  <SelectTrigger className="w-[200px] min-w-0 h-9 text-xs bg-white justify-between">
+                    <SelectValue placeholder="All Schools" className="min-w-0 truncate text-left">
+                      {(val: unknown) => {
+                        const activeId = typeof val === "string" && val.length > 0 ? val : schoolId;
+                        if (!activeId || activeId === "all") return "All Partner Schools";
+                        const found = schools.find((s) => s.id === activeId);
+                        const label = found ? found.name : (schools.length > 0 ? "Unknown School" : "All Partner Schools");
+                        return (
+                          <span className="truncate block" title={label}>
+                            {label}
+                          </span>
+                        );
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-72 min-w-48">
                     <SelectItem value="all">All Partner Schools</SelectItem>
                     {schools.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
@@ -283,7 +295,7 @@ export default function AdminReportsView({
               <Button
                 size="sm"
                 onClick={() => refreshTabData(activeTab, 1)}
-                className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="h-9 px-3 text-xs bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
                 disabled={isPending}
               >
                 {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Apply"}
@@ -310,7 +322,7 @@ export default function AdminReportsView({
         <div className="overflow-x-auto border-b border-slate-200">
           <TabsList className="inline-flex w-full justify-start h-auto p-1 bg-slate-100/80 rounded-lg space-x-1 min-w-[760px]">
             <TabsTrigger value="overview" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <BarChart3 className="h-4 w-4 text-emerald-600" />
+              <BarChart3 className="h-4 w-4 text-evenvibe-primary" />
               Overview
             </TabsTrigger>
             <TabsTrigger value="schools" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
@@ -318,31 +330,31 @@ export default function AdminReportsView({
               Schools
             </TabsTrigger>
             <TabsTrigger value="students" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <Users className="h-4 w-4 text-indigo-600" />
+              <Users className="h-4 w-4 text-evenvibe-primary" />
               Students
             </TabsTrigger>
             <TabsTrigger value="uniform_sizes" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <Layers className="h-4 w-4 text-emerald-600" />
+              <Layers className="h-4 w-4 text-evenvibe-primary" />
               Uniform Sizes
             </TabsTrigger>
             <TabsTrigger value="orders" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <ShoppingCart className="h-4 w-4 text-teal-600" />
+              <ShoppingCart className="h-4 w-4 text-evenvibe-primary" />
               Orders
             </TabsTrigger>
             <TabsTrigger value="production" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <Factory className="h-4 w-4 text-indigo-600" />
+              <Factory className="h-4 w-4 text-evenvibe-primary" />
               Production
             </TabsTrigger>
             <TabsTrigger value="quality_check" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <ClipboardCheck className="h-4 w-4 text-purple-600" />
+              <ClipboardCheck className="h-4 w-4 text-evenvibe-primary" />
               Quality Check
             </TabsTrigger>
             <TabsTrigger value="packing" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <Package className="h-4 w-4 text-teal-600" />
+              <Package className="h-4 w-4 text-evenvibe-primary" />
               Packing
             </TabsTrigger>
             <TabsTrigger value="delivery" className="gap-1.5 text-xs py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <Truck className="h-4 w-4 text-emerald-600" />
+              <Truck className="h-4 w-4 text-evenvibe-primary" />
               Delivery
             </TabsTrigger>
           </TabsList>

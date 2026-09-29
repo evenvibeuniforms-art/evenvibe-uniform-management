@@ -122,7 +122,7 @@ export function UniformConfigManager({ schoolId, allConfigs, availableClasses }:
                 <Button variant="outline" size="sm" onClick={() => setEditingConfigId(config.id)}>
                   <Pencil className="w-4 h-4 mr-2"/> Edit
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setDeactivatingConfigId(config.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                <Button variant="ghost" size="sm" onClick={() => setDeactivatingConfigId(config.id)} className="text-status-error hover:text-red-700 hover:bg-red-50">
                   <Trash2 className="w-4 h-4 mr-2"/> Deactivate
                 </Button>
               </CardFooter>

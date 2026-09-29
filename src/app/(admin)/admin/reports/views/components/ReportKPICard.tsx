@@ -16,7 +16,7 @@ export function ReportKPICard({
   value,
   subtitle,
   icon: Icon,
-  iconColor = "text-emerald-600",
+  iconColor = "text-evenvibe-primary",
   badgeText,
   badgeColor = "bg-slate-100 text-slate-700",
 }: ReportKPICardProps) {

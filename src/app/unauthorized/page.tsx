@@ -9,7 +9,7 @@ export default function UnauthorizedPage() {
       <Card className="w-full max-w-md shadow-sm border-red-100">
         <CardHeader className="space-y-2 text-center pb-6">
           <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-            <ShieldAlert className="w-6 h-6 text-red-600" />
+            <ShieldAlert className="w-6 h-6 text-status-error" />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight text-slate-900">
             Access Denied

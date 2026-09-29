@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
@@ -30,7 +31,8 @@ export function ClassSectionProgress({ data }: ClassSectionProgressProps) {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto rounded-md border border-slate-200">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto rounded-md border border-slate-200">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
@@ -50,10 +52,10 @@ export function ClassSectionProgress({ data }: ClassSectionProgressProps) {
                     <TableCell className="font-medium text-slate-900">{row.className || "Unassigned"}</TableCell>
                     <TableCell className="text-slate-600">{row.section || "-"}</TableCell>
                     <TableCell className="text-center font-medium">{row.total}</TableCell>
-                    <TableCell className="text-center text-emerald-600 font-medium">{row.completed}</TableCell>
+                    <TableCell className="text-center text-evenvibe-primary font-medium">{row.completed}</TableCell>
                     <TableCell className="text-center">
                       {row.pending > 0 ? (
-                        <span className="text-amber-600 font-medium">{row.pending}</span>
+                        <span className="text-status-warning font-medium">{row.pending}</span>
                       ) : (
                         <span className="text-slate-300">-</span>
                       )}
@@ -62,7 +64,7 @@ export function ClassSectionProgress({ data }: ClassSectionProgressProps) {
                       <div className="flex items-center gap-3">
                         <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
                           <div 
-                            className={`h-2 rounded-full ${row.progressPercentage === 100 ? 'bg-emerald-500' : 'bg-amber-400'}`} 
+                            className={`h-2 rounded-full ${row.progressPercentage === 100 ? 'bg-status-success' : 'bg-amber-400'}`} 
                             style={{ width: `${row.progressPercentage}%` }}
                           />
                         </div>
@@ -72,7 +74,7 @@ export function ClassSectionProgress({ data }: ClassSectionProgressProps) {
                     <TableCell className="text-right">
                       <Link 
                         href="/school/sizes"
-                        className="inline-flex items-center text-xs font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md"
+                        className="inline-flex items-center text-xs font-medium text-evenvibe-primary hover:text-emerald-700 bg-evenvibe-light px-2.5 py-1 rounded-md"
                       >
                         Collect <ArrowRight className="ml-1.5 h-3 w-3" />
                       </Link>
@@ -88,6 +90,50 @@ export function ClassSectionProgress({ data }: ClassSectionProgressProps) {
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-3">
+          {data.length > 0 ? (
+            data.map((row) => (
+              <MobileCard key={`${row.className}-${row.section}`}>
+                <MobileCardField label="Class" value={row.className || "Unassigned"} />
+                <MobileCardField label="Section" value={row.section || "-"} />
+                <MobileCardField label="Total Students" value={row.total} />
+                <MobileCardField label="Collected" value={row.completed} />
+                <MobileCardField label="Pending">
+                  {row.pending > 0 ? (
+                    <span className="text-status-warning font-medium">{row.pending}</span>
+                  ) : (
+                    <span className="text-slate-400">-</span>
+                  )}
+                </MobileCardField>
+                <MobileCardField label="Progress">
+                  <div className="flex items-center gap-3 mt-1">
+                    <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className={`h-2 rounded-full ${row.progressPercentage === 100 ? 'bg-status-success' : 'bg-amber-400'}`} 
+                        style={{ width: `${row.progressPercentage}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-slate-700 w-8">{row.progressPercentage}%</span>
+                  </div>
+                </MobileCardField>
+                <MobileCardActions label="Action">
+                  <Link 
+                    href="/school/sizes"
+                    className="inline-flex items-center text-xs font-medium text-evenvibe-primary hover:text-emerald-700 bg-evenvibe-light px-2.5 py-1.5 rounded-md border border-emerald-200"
+                  >
+                    Collect <ArrowRight className="ml-1.5 h-3 w-3" />
+                  </Link>
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          ) : (
+            <div className="p-8 text-center text-slate-500 text-sm bg-white rounded-lg border border-slate-200">
+              No classes found. Add students to see progress.
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

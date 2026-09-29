@@ -69,14 +69,14 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Real-time uniform manufacturing and order fulfillment overview. Logged in as{" "}
-            <span className="font-semibold text-emerald-800 capitalize bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
+            <span className="font-semibold text-emerald-800 capitalize bg-evenvibe-light px-2 py-0.5 rounded border border-emerald-200/60">
               {userRole.replace("_", " ")}
             </span>
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400 hidden sm:inline-block">
+          <span suppressHydrationWarning className="text-xs text-slate-400 hidden sm:inline-block">
             IST: {formattedTimestamp}
           </span>
           <Button
@@ -86,7 +86,7 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
             disabled={isRefreshing}
             className="text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 flex items-center gap-1.5 h-8"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-emerald-600" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-evenvibe-primary" : ""}`} />
             Refresh
           </Button>
         </div>
@@ -99,8 +99,8 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           value={data.primaryKPIs.activeSchoolsCount}
           subtitle="Registered and approved"
           icon={School}
-          iconBgClass="bg-emerald-50"
-          iconColorClass="text-emerald-600"
+          iconBgClass="bg-evenvibe-light"
+          iconColorClass="text-evenvibe-primary"
           href="/admin/schools"
         />
 
@@ -119,8 +119,8 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           value={data.primaryKPIs.activeOrdersCount}
           subtitle="Currently in progress"
           icon={ShoppingBag}
-          iconBgClass="bg-indigo-50"
-          iconColorClass="text-indigo-600"
+          iconBgClass="bg-evenvibe-light"
+          iconColorClass="text-evenvibe-primary"
           href="/admin/orders"
         />
 
@@ -130,7 +130,7 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           subtitle="In manufacturing"
           icon={Factory}
           iconBgClass="bg-amber-50"
-          iconColorClass="text-amber-600"
+          iconColorClass="text-status-warning"
           href="/admin/production"
         />
       </div>
@@ -143,7 +143,7 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           subtitle="Awaiting onboarding approval"
           icon={Clock}
           iconBgClass="bg-amber-50"
-          iconColorClass="text-amber-600"
+          iconColorClass="text-status-warning"
           href="/admin/schools"
           badge={
             data.secondaryKPIs.pendingSchoolsCount > 0
@@ -157,8 +157,8 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           value={data.secondaryKPIs.qcPendingCount}
           subtitle="Awaiting quality check"
           icon={ClipboardCheck}
-          iconBgClass="bg-purple-50"
-          iconColorClass="text-purple-600"
+          iconBgClass="bg-evenvibe-light"
+          iconColorClass="text-evenvibe-primary"
           href="/admin/quality-check"
         />
 
@@ -167,8 +167,8 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           value={data.secondaryKPIs.packingPendingCount}
           subtitle="Ready for dispatch"
           icon={PackageCheck}
-          iconBgClass="bg-teal-50"
-          iconColorClass="text-teal-600"
+          iconBgClass="bg-evenvibe-light"
+          iconColorClass="text-evenvibe-primary"
           href="/admin/packing-delivery"
         />
 
@@ -178,7 +178,7 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           subtitle="On the way"
           icon={Truck}
           iconBgClass="bg-cyan-50"
-          iconColorClass="text-cyan-600"
+          iconColorClass="text-status-info"
           href="/admin/packing-delivery"
         />
       </div>

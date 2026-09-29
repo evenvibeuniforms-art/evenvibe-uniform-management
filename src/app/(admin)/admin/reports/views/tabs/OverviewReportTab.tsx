@@ -19,6 +19,7 @@ import {
   Package,
   Truck,
 } from "lucide-react";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 
 interface OverviewReportTabProps {
   kpi: DashboardKPISummary;
@@ -51,21 +52,21 @@ export function OverviewReportTab({
           value={kpi.totalStudents}
           subtitle="Total across all schools"
           icon={Users}
-          iconColor="text-indigo-600"
+          iconColor="text-evenvibe-primary"
         />
         <ReportKPICard
           title="Total Orders"
           value={kpi.totalOrders}
           subtitle="Lifetime order submissions"
           icon={ShoppingCart}
-          iconColor="text-emerald-600"
+          iconColor="text-evenvibe-primary"
         />
         <ReportKPICard
           title="Total Ordered Items"
           value={kpi.totalOrderedItems}
           subtitle="Historical snapshot quantity"
           icon={Layers}
-          iconColor="text-amber-600"
+          iconColor="text-status-warning"
         />
       </div>
 
@@ -76,28 +77,28 @@ export function OverviewReportTab({
           value={kpi.ordersInProduction}
           subtitle="Manufacturing active"
           icon={Factory}
-          iconColor="text-indigo-600"
+          iconColor="text-evenvibe-primary"
         />
         <ReportKPICard
           title="In Quality Check"
           value={kpi.ordersInQC}
           subtitle="Inspection active"
           icon={ClipboardCheck}
-          iconColor="text-purple-600"
+          iconColor="text-evenvibe-primary"
         />
         <ReportKPICard
           title="Packed Orders"
           value={kpi.ordersPacked}
           subtitle="Ready for courier dispatch"
           icon={Package}
-          iconColor="text-teal-600"
+          iconColor="text-evenvibe-primary"
         />
         <ReportKPICard
           title="Delivered Orders"
           value={kpi.ordersDelivered}
           subtitle="Fulfilled and confirmed"
           icon={Truck}
-          iconColor="text-emerald-600"
+          iconColor="text-evenvibe-primary"
         />
       </div>
 
@@ -124,7 +125,7 @@ export function OverviewReportTab({
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
               <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                <ClipboardCheck className="h-4 w-4 text-purple-600" />
+                <ClipboardCheck className="h-4 w-4 text-evenvibe-primary" />
                 Quality Inspection Summary
               </CardTitle>
             </CardHeader>
@@ -135,7 +136,7 @@ export function OverviewReportTab({
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500">Passed Inspection</span>
-                <span className="font-medium text-emerald-700">{quality.totalPassed}</span>
+                <span className="font-medium text-evenvibe-deep">{quality.totalPassed}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500">Defective Items</span>
@@ -152,7 +153,7 @@ export function OverviewReportTab({
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
               <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                <Truck className="h-4 w-4 text-emerald-600" />
+                <Truck className="h-4 w-4 text-evenvibe-primary" />
                 Fulfillment & Delivery Summary
               </CardTitle>
             </CardHeader>
@@ -167,11 +168,11 @@ export function OverviewReportTab({
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500">Confirmed Delivered</span>
-                <span className="font-medium text-emerald-700">{delivery.delivered}</span>
+                <span className="font-medium text-evenvibe-deep">{delivery.delivered}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-slate-500">Delivery Completion Rate</span>
-                <span className="font-bold text-emerald-700">{delivery.completionRate}%</span>
+                <span className="font-bold text-evenvibe-deep">{delivery.completionRate}%</span>
               </div>
             </CardContent>
           </Card>
@@ -189,12 +190,14 @@ export function OverviewReportTab({
             Factual operational metrics across all registered partner schools.
           </CardDescription>
         </CardHeader>
-        <div className="overflow-x-auto">
+
+        {/* Desktop Table View (>= 768px) */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
                 <TableHead className="text-xs font-semibold text-slate-700">School</TableHead>
-                <TableHead className="text-xs font-semibold text-slate-700">Code</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-700">City</TableHead>
                 <TableHead className="text-xs font-semibold text-slate-700 text-center">Students</TableHead>
                 <TableHead className="text-xs font-semibold text-slate-700 text-center">Orders</TableHead>
                 <TableHead className="text-xs font-semibold text-slate-700 text-center">Items Ordered</TableHead>
@@ -214,18 +217,40 @@ export function OverviewReportTab({
                 schoolComparison.map((s) => (
                   <TableRow key={s.schoolId} className="hover:bg-slate-50/80">
                     <TableCell className="font-medium text-slate-900 text-xs">{s.schoolName}</TableCell>
-                    <TableCell className="text-slate-600 text-xs font-mono">{s.schoolCode}</TableCell>
+                    <TableCell className="text-slate-600 text-xs">{s.city || "—"}</TableCell>
                     <TableCell className="text-center text-slate-800 text-xs font-medium">{s.totalStudents}</TableCell>
                     <TableCell className="text-center text-slate-800 text-xs font-medium">{s.orderCount}</TableCell>
                     <TableCell className="text-center text-slate-800 text-xs font-medium">{s.totalItems}</TableCell>
                     <TableCell className="text-slate-700 text-xs">{s.currentOrderStage}</TableCell>
-                    <TableCell className="text-center text-emerald-700 text-xs font-medium">{s.deliveredOrders}</TableCell>
+                    <TableCell className="text-center text-evenvibe-deep text-xs font-medium">{s.deliveredOrders}</TableCell>
                     <TableCell className="text-center text-amber-700 text-xs font-medium">{s.pendingOrders}</TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Mobile Card View (< 768px) */}
+        <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+          {schoolComparison.length === 0 ? (
+            <div className="text-center py-8 text-xs text-slate-500 bg-white rounded-lg border border-slate-200">
+              No school operational data found for the selected criteria.
+            </div>
+          ) : (
+            schoolComparison.map((s) => (
+              <MobileCard key={s.schoolId}>
+                <MobileCardField label="School" value={s.schoolName} />
+                <MobileCardField label="City" value={s.city || "—"} />
+                <MobileCardField label="Students" value={s.totalStudents} />
+                <MobileCardField label="Orders" value={s.orderCount} />
+                <MobileCardField label="Items Ordered" value={s.totalItems} />
+                <MobileCardField label="Latest Stage" value={s.currentOrderStage} />
+                <MobileCardField label="Delivered" value={<span className="text-evenvibe-deep font-medium">{s.deliveredOrders}</span>} />
+                <MobileCardField label="Pending" value={<span className="text-amber-700 font-medium">{s.pendingOrders}</span>} />
+              </MobileCard>
+            ))
+          )}
         </div>
       </Card>
     </div>

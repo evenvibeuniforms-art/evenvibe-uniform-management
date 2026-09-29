@@ -3,6 +3,10 @@ import { AdminSchoolsView } from "./views/AdminSchoolsView";
 import { AdminClassesView } from "./views/AdminClassesView";
 import { AdminStudentsView } from "./views/AdminStudentsView";
 
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { UserMinus } from "lucide-react";
+
 export const metadata = {
   title: "Manage Students | EvenVive Admin",
 };
@@ -22,6 +26,12 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
             <h1 className="text-3xl font-bold tracking-tight">Manage Students</h1>
             <p className="text-slate-500">Select a school to view its classes.</p>
           </div>
+          <Link href="/admin/tc-students">
+            <Button variant="outline" className="flex items-center gap-2">
+              <UserMinus className="h-4 w-4 text-status-error" />
+              View TC Students
+            </Button>
+          </Link>
         </div>
         <AdminSchoolsView schools={schools} />
       </div>

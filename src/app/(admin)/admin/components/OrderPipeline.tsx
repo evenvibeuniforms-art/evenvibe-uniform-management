@@ -23,7 +23,7 @@ export default function OrderPipeline({ stages }: OrderPipelineProps) {
       <CardHeader className="pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100">
         <div>
           <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-emerald-600" />
+            <Layers className="w-5 h-5 text-evenvibe-primary" />
             <CardTitle className="text-lg font-semibold text-slate-900">
               Order Pipeline
             </CardTitle>
@@ -39,7 +39,7 @@ export default function OrderPipeline({ stages }: OrderPipelineProps) {
           </div>
           <Link
             href="/admin/orders"
-            className="text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1 hover:underline"
+            className="text-xs font-medium text-evenvibe-primary hover:text-emerald-700 flex items-center gap-1 hover:underline"
           >
             View All Orders
             <ArrowRight className="w-3.5 h-3.5" />
@@ -75,7 +75,7 @@ export default function OrderPipeline({ stages }: OrderPipelineProps) {
                       className={cn(
                         "text-xl sm:text-2xl font-extrabold mt-1 tracking-tight",
                         hasOrders ? "text-slate-900" : "text-slate-400",
-                        isDelivered && hasOrders && "text-emerald-700"
+                        isDelivered && hasOrders && "text-evenvibe-deep"
                       )}
                     >
                       {stage.count}

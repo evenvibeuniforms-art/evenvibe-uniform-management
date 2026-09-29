@@ -50,7 +50,7 @@ export function UniformSettings() {
             </div>
 
             <div className="flex items-start gap-2 bg-white p-2.5 rounded border border-slate-200">
-              <Database className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+              <Database className="h-4 w-4 text-evenvibe-primary shrink-0 mt-0.5" />
               <div>
                 <span className="font-semibold text-slate-800">Size Templates:</span>
                 <p className="text-slate-500 text-[11px] mt-0.5">
@@ -60,7 +60,7 @@ export function UniformSettings() {
             </div>
 
             <div className="flex items-start gap-2 bg-white p-2.5 rounded border border-slate-200">
-              <ShieldCheck className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
+              <ShieldCheck className="h-4 w-4 text-evenvibe-primary shrink-0 mt-0.5" />
               <div>
                 <span className="font-semibold text-slate-800">Historical Protection:</span>
                 <p className="text-slate-500 text-[11px] mt-0.5">
@@ -76,7 +76,7 @@ export function UniformSettings() {
             To configure garment items, color schemes, or size matrices for a school, open the school&apos;s uniform manager.
           </span>
           <Link href="/admin/schools">
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 text-xs">
+            <Button size="sm" className="bg-evenvibe-primary hover:bg-blue-700 text-white shrink-0 text-xs">
               Go to School Uniforms
             </Button>
           </Link>

@@ -19,7 +19,7 @@ export default async function StudentsPage() {
   if (error) {
     console.error("Error fetching students:", JSON.stringify(error, null, 2));
     return (
-      <div className="p-8 text-center bg-red-50 text-red-600 rounded-md">
+      <div className="p-8 text-center bg-red-50 text-status-error rounded-md">
         Unable to load students. Please try again.
       </div>
     );
@@ -55,7 +55,7 @@ export default async function StudentsPage() {
         </Card>
         <Card className="shadow-sm border-slate-200">
           <CardContent className="p-6 flex items-center space-x-4">
-            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-full">
+            <div className="p-3 bg-evenvibe-light text-evenvibe-primary rounded-full">
               <UserCheck className="h-6 w-6" />
             </div>
             <div>

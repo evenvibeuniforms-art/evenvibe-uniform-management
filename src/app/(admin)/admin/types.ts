@@ -46,6 +46,7 @@ export interface SchoolOperationalSummary {
   id: string;
   name: string;
   school_code: string;
+  city: string | null;
   students_count: number;
   orders_count: number;
   latest_order_number: string | null;

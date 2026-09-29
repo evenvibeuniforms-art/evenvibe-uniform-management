@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireSchoolAdmin } from "@/lib/auth/server";
 import { revalidatePath } from "next/cache";
+import { DeliveryProofImage } from "@/types/database";
 
 export type OrderStatus = 
   | 'submitted' 
@@ -43,6 +44,16 @@ export type EligibleStudent = {
   is_complete: boolean;
 };
 
+export type DeliveryItem = {
+  id: string;
+  style_name: string;
+  item_name: string;
+  color: string;
+  size: string;
+  quantity: number;
+  status: string;
+};
+
 export type OrderDetails = {
   id: string;
   order_number: string;
@@ -50,6 +61,13 @@ export type OrderDetails = {
   courier_name: string | null;
   tracking_number: string | null;
   estimated_delivery: string | null;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
+  delivery_remarks?: string | null;
+  delivery_items?: DeliveryItem[];
+  total_delivery_quantity?: number;
+  total_delivery_items?: number;
+  has_delivery_data?: boolean;
   created_at: string;
   is_legacy?: boolean;
   tracking_mode?: 'legacy' | 'tracked';
@@ -85,6 +103,7 @@ export type OrderDetails = {
     uniform_type: string;
     item_type: string;
   }[];
+  delivery_proof_images?: DeliveryProofImage[];
 };
 
 export type OrderListItem = {
@@ -187,7 +206,7 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
 
     let query = supabase
       .from("orders")
-      .select("id, order_number, status, courier_name, tracking_number, estimated_delivery, created_at, requirements!inner (id, requirement_number, total_students, regular_uniform_students, tshirt_uniform_students, submitted_at, requirement_items (*)), order_status_history (*), alteration_requests (id, request_number, status, issue_type, created_at, uniform_type, item_type)")
+      .select("id, order_number, status, courier_name, tracking_number, estimated_delivery, shipped_at, delivered_at, delivery_remarks, created_at, requirements!inner (id, requirement_number, total_students, regular_uniform_students, tshirt_uniform_students, submitted_at, requirement_items (*)), order_status_history (*), alteration_requests (id, request_number, status, issue_type, created_at, uniform_type, item_type)")
       .eq("school_id", profile.school_id);
 
     if (orderId) {
@@ -212,21 +231,125 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
 
     const requirement = Array.isArray(data.requirements) ? data.requirements[0] : data.requirements;
 
-    // Concurrently fetch completed sizes and eligible students
+    // Concurrently fetch completed sizes, eligible students, delivery proof images, QC items, and packing record
     const needsEligible = data.status === 'submitted' || data.status === 'under_review';
     
-    const [trackedResult, eligibleResult] = await Promise.all([
+    const [trackedResult, eligibleResult, proofResult, qcItemsResult, packingRecordResult] = await Promise.all([
       supabase
         .from('requirement_students')
         .select('*', { count: 'exact', head: true })
         .eq('requirement_id', requirement.id),
       needsEligible
         ? supabase.rpc('get_eligible_students_for_order', { p_order_id: data.id })
-        : Promise.resolve({ data: null, error: null })
+        : Promise.resolve({ data: null, error: null }),
+      supabase
+        .from('delivery_proof_images')
+        .select(`
+          id,
+          order_id,
+          storage_path,
+          file_name,
+          mime_type,
+          file_size,
+          caption,
+          uploaded_by,
+          created_at,
+          display_order,
+          profiles:uploaded_by (
+            id,
+            full_name,
+            role
+          )
+        `)
+        .eq('order_id', data.id)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('order_quality_check_items')
+        .select('id, item_name, style_id, style_name, color, size, packed_quantity, passed_quantity, defective_quantity, status')
+        .eq('order_id', data.id)
+        .order('item_name')
+        .order('size'),
+      supabase
+        .from('packing_records')
+        .select('id, status, total_quantity, packed_quantity, remarks')
+        .eq('order_id', data.id)
+        .maybeSingle(),
     ]);
 
     const completedSizes = trackedResult.count || 0;
     const pendingCount = Math.max(0, requirement.total_students - completedSizes);
+
+    // Generate temporary signed URLs for school admin viewing
+    let deliveryProofImages: DeliveryProofImage[] = [];
+    if (proofResult.data && proofResult.data.length > 0) {
+      const paths = proofResult.data.map((p) => p.storage_path);
+      const { data: signedUrls } = await supabase.storage
+        .from('delivery-proofs')
+        .createSignedUrls(paths, 3600);
+      const signedMap = new Map((signedUrls || []).map((s) => [s.path, s.signedUrl]));
+      deliveryProofImages = proofResult.data.map((img) => ({
+        ...img,
+        profiles: Array.isArray(img.profiles) ? img.profiles[0] : img.profiles,
+        signed_url: signedMap.get(img.storage_path) || null,
+      }));
+    }
+
+    // Authoritative Final Delivery Dataset
+    // In accordance with EvenVibe Delivery workflow:
+    // Deliverable quantities come strictly from QC Passed Quantity
+    // Rows with passed_quantity = 0 or null are strictly excluded from operational delivery rows
+    const isDelivered = data.status === "delivered";
+    const isDispatched = data.status === "dispatched";
+    const isInTransit = data.status === "in_transit";
+    const isPacked = data.status === "packed";
+
+    const itemStatusLabel = isDelivered
+      ? "Delivered"
+      : isInTransit
+      ? "On the Way"
+      : isDispatched
+      ? "Dispatched"
+      : "Ready";
+
+    const rawQcItems = qcItemsResult.data || [];
+    const activeDeliveryRows: DeliveryItem[] = rawQcItems
+      .filter((item) => (item.passed_quantity || 0) > 0)
+      .map((item) => ({
+        id: item.id,
+        style_name: item.style_name?.trim() || "Standard",
+        item_name: item.item_name,
+        color: item.color?.trim() || "Default",
+        size: item.size,
+        quantity: item.passed_quantity || 0,
+        status: itemStatusLabel,
+      }));
+
+    const packingRecord = packingRecordResult.data;
+    const isDeliveryStage = isPacked || isDispatched || isInTransit || isDelivered;
+    const hasDeliveryData = (isDeliveryStage || !!packingRecord) && activeDeliveryRows.length > 0;
+    const totalDeliveryQuantity = activeDeliveryRows.reduce((sum, item) => sum + item.quantity, 0);
+    const totalDeliveryItems = activeDeliveryRows.length;
+    const orderRaw = data as unknown as {
+      shipped_at?: string | null;
+      delivered_at?: string | null;
+      delivery_remarks?: string | null;
+    };
+
+    // Fallback to immutable historical timestamps if orders column was unset for older records
+    const shippedAt =
+      orderRaw.shipped_at ||
+      history.find((h: { status: string; created_at: string }) => h.status === "dispatched")?.created_at ||
+      null;
+
+    const deliveredAt =
+      orderRaw.delivered_at ||
+      history.find((h: { status: string; created_at: string }) => h.status === "delivered")?.created_at ||
+      null;
+
+    const deliveryRemarks =
+      orderRaw.delivery_remarks ||
+      packingRecord?.remarks ||
+      null;
 
     const isLegacy = false;
     const trackingMode: 'legacy' | 'tracked' = 'tracked';
@@ -246,6 +369,13 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
       courier_name: data.courier_name,
       tracking_number: data.tracking_number,
       estimated_delivery: data.estimated_delivery,
+      shipped_at: shippedAt,
+      delivered_at: deliveredAt,
+      delivery_remarks: deliveryRemarks,
+      delivery_items: activeDeliveryRows,
+      total_delivery_quantity: totalDeliveryQuantity,
+      total_delivery_items: totalDeliveryItems,
+      has_delivery_data: hasDeliveryData,
       created_at: data.created_at,
       is_legacy: isLegacy,
       tracking_mode: trackingMode,
@@ -266,6 +396,7 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
       history: history,
       items: requirement.requirement_items || [],
       alteration_requests: data.alteration_requests || [],
+      delivery_proof_images: deliveryProofImages,
     };
 
     return { order: orderDetails };

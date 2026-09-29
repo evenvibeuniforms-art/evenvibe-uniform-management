@@ -60,8 +60,8 @@ export function NotificationStatusDialog({
             "This announcement will become immediately visible to all targeted schools.",
           confirmText: "Publish Now",
           buttonVariant: "default" as const,
-          buttonClass: "bg-emerald-600 hover:bg-emerald-700 text-white",
-          icon: <Send className="h-5 w-5 text-emerald-600" />,
+          buttonClass: "bg-evenvibe-primary hover:bg-evenvibe-deep text-white",
+          icon: <Send className="h-5 w-5 text-evenvibe-primary" />,
           iconBg: "bg-emerald-100",
         };
       case "cancel_scheduled":
@@ -72,7 +72,7 @@ export function NotificationStatusDialog({
           confirmText: "Cancel Schedule",
           buttonVariant: "destructive" as const,
           buttonClass: "",
-          icon: <Ban className="h-5 w-5 text-rose-600" />,
+          icon: <Ban className="h-5 w-5 text-status-error" />,
           iconBg: "bg-rose-100",
         };
       case "archive":
@@ -94,7 +94,7 @@ export function NotificationStatusDialog({
           confirmText: "Delete Draft",
           buttonVariant: "destructive" as const,
           buttonClass: "",
-          icon: <Trash2 className="h-5 w-5 text-red-600" />,
+          icon: <Trash2 className="h-5 w-5 text-status-error" />,
           iconBg: "bg-red-100",
         };
     }

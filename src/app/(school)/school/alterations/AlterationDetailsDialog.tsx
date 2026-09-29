@@ -31,10 +31,15 @@ interface AlterationDetailData {
   request_number: string;
   status: string;
   item_name: string;
+  style_name?: string | null;
+  color?: string | null;
   issue_type: string;
   quantity: number;
   current_size: string | null;
   required_size: string | null;
+  given_size?: string | null;
+  change_size?: string | null;
+  attempt_number?: number;
   remarks: string | null;
   proof_photo_url: string | null;
   signedPhotoUrl: string | null;
@@ -120,7 +125,7 @@ export function AlterationDetailsDialog({
       case "rejected":
         return <Badge className="bg-red-100 text-red-800 border-red-200 uppercase">Rejected</Badge>;
       case "rework":
-        return <Badge className="bg-purple-100 text-purple-800 border-purple-200 uppercase">Rework</Badge>;
+        return <Badge className="bg-evenvibe-light text-evenvibe-deep border-evenvibe-light uppercase">Rework</Badge>;
       case "completed":
         return <Badge className="bg-slate-100 text-slate-800 border-slate-200 uppercase">Completed</Badge>;
       default:
@@ -155,7 +160,7 @@ export function AlterationDetailsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between text-xl font-bold text-slate-900 border-b pb-3">
             <div className="flex items-center gap-2">
-              <Scissors className="h-5 w-5 text-emerald-600" />
+              <Scissors className="h-5 w-5 text-evenvibe-primary" />
               <span>{data?.request_number || "Alteration Request"}</span>
             </div>
             {data && renderStatusBadge(data.status)}
@@ -164,11 +169,11 @@ export function AlterationDetailsDialog({
 
         {loading ? (
           <div className="py-12 flex flex-col items-center justify-center text-slate-500 gap-2">
-            <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+            <Loader2 className="h-6 w-6 animate-spin text-evenvibe-primary" />
             <p className="text-sm">Loading alteration details...</p>
           </div>
         ) : error ? (
-          <div className="py-8 text-center text-red-600 text-sm">{error}</div>
+          <div className="py-8 text-center text-status-error text-sm">{error}</div>
         ) : !data ? null : (
           <div className="space-y-6 pt-1">
             {/* Section 1: Request Overview */}
@@ -198,16 +203,16 @@ export function AlterationDetailsDialog({
             )}
 
             {data.rework_remarks && (
-              <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-lg">
-                <span className="text-xs font-semibold uppercase text-purple-800 tracking-wider block mb-1">
+              <div className="p-3.5 bg-evenvibe-light border border-evenvibe-light rounded-lg">
+                <span className="text-xs font-semibold uppercase text-evenvibe-deep tracking-wider block mb-1">
                   Rework Instructions / Remarks
                 </span>
-                <p className="text-sm text-purple-900">{data.rework_remarks}</p>
+                <p className="text-sm text-evenvibe-deep">{data.rework_remarks}</p>
               </div>
             )}
 
             {data.completed_remarks && (
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <div className="p-3.5 bg-evenvibe-light border border-emerald-200 rounded-lg">
                 <span className="text-xs font-semibold uppercase text-emerald-800 tracking-wider block mb-1">
                   Completion Remarks
                 </span>
@@ -273,22 +278,35 @@ export function AlterationDetailsDialog({
                 <Scissors className="h-4 w-4 text-slate-500" />
                 Uniform Item & Issue
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
                 <div>
                   <span className="text-xs text-slate-500 block">Uniform Item</span>
                   <span className="font-semibold text-slate-800 capitalize">{data.item_name}</span>
+                  {data.style_name && (
+                    <span className="text-[11px] text-slate-500 block">
+                      {data.style_name} {data.color ? `• ${data.color}` : ""}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-xs text-slate-500 block">Attempt</span>
+                  <span className="font-semibold text-evenvibe-deep">Attempt {data.attempt_number || 1} of 2</span>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-500 block">Given Size</span>
+                  <span className="font-medium text-slate-800 font-mono flex items-center gap-1">
+                    {data.given_size || data.current_size || "-"} 🔒
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-500 block">Change Size</span>
+                  <span className="font-bold text-evenvibe-deep font-mono text-base">
+                    {data.change_size || data.required_size || "-"}
+                  </span>
                 </div>
                 <div>
                   <span className="text-xs text-slate-500 block">Quantity</span>
                   <span className="font-semibold text-slate-800">{data.quantity}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-slate-500 block">Current Size</span>
-                  <span className="font-medium text-slate-700">{data.current_size || "-"}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-slate-500 block">Required Size</span>
-                  <span className="font-bold text-emerald-700">{data.required_size || "-"}</span>
                 </div>
               </div>
 
@@ -316,7 +334,7 @@ export function AlterationDetailsDialog({
                     href={data.signedPhotoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                    className="inline-flex items-center gap-1 text-xs text-evenvibe-primary hover:text-emerald-700 font-medium"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Open full size
@@ -345,7 +363,7 @@ export function AlterationDetailsDialog({
                 ) : (
                   data.history.map((h: HistoryItem, idx: number) => (
                     <div key={h.id || idx} className="flex items-start gap-3 text-sm">
-                      <div className="h-2 w-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                      <div className="h-2 w-2 rounded-full bg-status-success mt-1.5 shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-slate-900 uppercase text-xs">

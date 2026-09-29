@@ -25,6 +25,7 @@ import Link from "next/link";
 import { ExportButton } from "../ExportButton";
 import { AdminStudentDetailsDialog } from "../AdminStudentDetailsDialog";
 import { useRealtimeRefresh } from "@/lib/supabase/useRealtime";
+import { MobileCard, MobileCardField, MobileCardActions } from "@/components/ui/mobile-card";
 
 type Student = {
   id: string;
@@ -234,88 +235,137 @@ export function AdminStudentsView({
       </div>
 
       <div className="bg-white rounded-md border shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader className="bg-slate-50">
-            <TableRow>
-              <TableHead 
-                className="cursor-pointer hover:bg-slate-100"
-                onClick={() => handleSort("student_name")}
-              >
-                Student Name {getSortIcon("student_name")}
-              </TableHead>
-              <TableHead 
-                className="cursor-pointer hover:bg-slate-100"
-                onClick={() => handleSort("admission_number")}
-              >
-                Admission No {getSortIcon("admission_number")}
-              </TableHead>
-              <TableHead>Section</TableHead>
-              <TableHead>Gender</TableHead>
-              <TableHead 
-                className="cursor-pointer hover:bg-slate-100"
-                onClick={() => handleSort("sizeStatus")}
-              >
-                Size Status {getSortIcon("sizeStatus")}
-              </TableHead>
-              <TableHead className="text-right">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {initialStudents.length === 0 ? (
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-slate-50">
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-slate-500">
-                  No students found matching your criteria.
-                </TableCell>
+                <TableHead 
+                  className="cursor-pointer hover:bg-slate-100"
+                  onClick={() => handleSort("student_name")}
+                >
+                  Student Name {getSortIcon("student_name")}
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-slate-100"
+                  onClick={() => handleSort("admission_number")}
+                >
+                  Admission No {getSortIcon("admission_number")}
+                </TableHead>
+                <TableHead>Section</TableHead>
+                <TableHead>Gender</TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-slate-100"
+                  onClick={() => handleSort("sizeStatus")}
+                >
+                  Size Status {getSortIcon("sizeStatus")}
+                </TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
-            ) : (
-              initialStudents.map((student) => (
-                <TableRow key={student.id}>
-                  <TableCell className="font-medium text-slate-900">
-                    {student.student_name}
+            </TableHeader>
+            <TableBody>
+              {initialStudents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-slate-500">
+                    No students found matching your criteria.
                   </TableCell>
-                  <TableCell>
-                    <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">
-                      {student.admission_number}
-                    </span>
-                  </TableCell>
-                  <TableCell>{student.section || "N/A"}</TableCell>
-                  <TableCell>{student.gender}</TableCell>
-                  <TableCell>
+                </TableRow>
+              ) : (
+                initialStudents.map((student) => (
+                  <TableRow key={student.id}>
+                    <TableCell className="font-medium text-slate-900">
+                      {student.student_name}
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">
+                        {student.admission_number}
+                      </span>
+                    </TableCell>
+                    <TableCell>{student.section || "N/A"}</TableCell>
+                    <TableCell>{student.gender}</TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={
+                          student.sizeStatus === "COMPLETE" ? "default" :
+                          student.sizeStatus === "PENDING" ? "secondary" : "outline"
+                        }
+                        className={
+                          student.sizeStatus === "COMPLETE" ? "bg-status-success" :
+                          student.sizeStatus === "PENDING" ? "bg-status-warning text-white hover:bg-status-warning" : ""
+                        }
+                      >
+                        {student.sizeStatus.replace("_", " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setSelectedStudentId(student.id)}
+                      >
+                        <Eye className="h-4 w-4 mr-1.5" />
+                        View Sizes
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+          {initialStudents.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-sm">
+              No students found matching your criteria.
+            </div>
+          ) : (
+            initialStudents.map((student) => (
+              <MobileCard key={student.id}>
+                <MobileCardField label="Student Name" value={<span className="font-semibold text-slate-900">{student.student_name}</span>} />
+                <MobileCardField label="Admission No" value={<span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-700">{student.admission_number}</span>} />
+                <MobileCardField label="Section" value={student.section || "N/A"} />
+                <MobileCardField label="Gender" value={student.gender} />
+                <MobileCardField
+                  label="Size Status"
+                  value={
                     <Badge 
                       variant={
                         student.sizeStatus === "COMPLETE" ? "default" :
                         student.sizeStatus === "PENDING" ? "secondary" : "outline"
                       }
                       className={
-                        student.sizeStatus === "COMPLETE" ? "bg-emerald-500" :
-                        student.sizeStatus === "PENDING" ? "bg-amber-500 text-white hover:bg-amber-600" : ""
+                        student.sizeStatus === "COMPLETE" ? "bg-status-success text-white" :
+                        student.sizeStatus === "PENDING" ? "bg-status-warning text-white hover:bg-status-warning" : ""
                       }
                     >
                       {student.sizeStatus.replace("_", " ")}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => setSelectedStudentId(student.id)}
-                    >
-                      <Eye className="h-4 w-4 mr-1.5" />
-                      Manage Sizes
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                  }
+                />
+                <MobileCardActions label="Action">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setSelectedStudentId(student.id)}
+                    className="w-full text-evenvibe-primary border-emerald-200 hover:bg-emerald-50 h-8 gap-1.5 justify-center"
+                  >
+                    <Eye className="h-4 w-4" />
+                    View Sizes
+                  </Button>
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
+        </div>
       </div>
       
       {/* Pagination summary */}
-      <div className="flex justify-between items-center text-sm text-slate-500 mt-2 px-2">
+      <div className="flex flex-col sm:flex-row gap-2 justify-between items-center text-sm text-slate-500 mt-2 px-2">
         <span>Showing {initialStudents.length} of {totalCount} students</span>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto justify-end">
           <Button 
             variant="outline" 
             size="sm" 

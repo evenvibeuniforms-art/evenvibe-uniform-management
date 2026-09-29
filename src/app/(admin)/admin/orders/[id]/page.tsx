@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import AdminOrderDetailsView from "../views/AdminOrderDetailsView";
+import { DEFAULT_PRODUCTION_SEQUENCE } from "@/lib/productionWorkflow";
 
 export const metadata = {
   title: "Order Details | EvenVibe Admin",
@@ -42,6 +43,8 @@ export default async function AdminOrderDetailsPage({
     { data: requirementItems },
     { data: statusHistory },
     { data: modificationHistory },
+    { data: workflowsData },
+    { data: productionRecord },
   ] = await Promise.all([
     supabase
       .from("requirement_items")
@@ -75,7 +78,53 @@ export default async function AdminOrderDetailsPage({
       `)
       .eq("order_id", id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("order_production_workflows")
+      .select("*")
+      .eq("order_id", id)
+      .order("sequence_order", { ascending: true }),
+    supabase
+      .from("production_records")
+      .select("id, stage, completed_quantity")
+      .eq("order_id", id)
+      .maybeSingle(),
   ]);
+
+  let orderWorkflows = workflowsData || [];
+
+  if (orderWorkflows.length === 0) {
+    const newRows = DEFAULT_PRODUCTION_SEQUENCE.map((stage_key, idx) => ({
+      order_id: id,
+      stage_key,
+      sequence_order: idx + 1,
+      status: "pending" as const,
+    }));
+
+    const { data: seeded } = await supabase
+      .from("order_production_workflows")
+      .insert(newRows)
+      .select("*")
+      .order("sequence_order", { ascending: true });
+
+    orderWorkflows = seeded || [];
+  }
+
+  const isWorkflowLocked =
+    order.status !== "confirmed" &&
+    order.status !== "submitted" &&
+    order.status !== "production"
+      ? true
+      : orderWorkflows.some((w) => w.sequence_order >= 4 && w.status === "completed") ||
+        (!!productionRecord &&
+          productionRecord.completed_quantity > 0 &&
+          [
+            "stitching",
+            "printing",
+            "embroidering",
+            "checking",
+            "ironing_packing",
+            "production_completed",
+          ].includes(productionRecord.stage));
 
   return (
     <AdminOrderDetailsView
@@ -83,6 +132,8 @@ export default async function AdminOrderDetailsPage({
       requirementItems={requirementItems || []}
       statusHistory={statusHistory || []}
       modificationHistory={modificationHistory || []}
+      orderWorkflows={orderWorkflows}
+      isWorkflowLocked={isWorkflowLocked}
     />
   );
 }

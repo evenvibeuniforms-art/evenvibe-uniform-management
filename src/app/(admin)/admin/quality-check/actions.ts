@@ -10,6 +10,21 @@ const startQCSchema = z.object({
   remarks: z.string().max(1000, "Remarks cannot exceed 1000 characters").optional(),
 });
 
+const saveQCItemsSchema = z.object({
+  orderId: z.string().uuid("Invalid order ID"),
+  items: z.array(
+    z.object({
+      item_name: z.string().min(1, "Item name is required"),
+      style_id: z.string().nullable().optional(),
+      style_name: z.string().nullable().optional(),
+      color: z.string().nullable().optional(),
+      size: z.string().min(1, "Size is required"),
+      passed_quantity: z.number().int().min(0, "Passed quantity cannot be negative").nullable().optional(),
+      remarks: z.string().max(1000).nullable().optional(),
+    })
+  ),
+});
+
 const updateProgressSchema = z.object({
   orderId: z.string().uuid("Invalid order ID"),
   checkedQty: z.number().int().min(0, "Checked quantity must be a non-negative whole number"),
@@ -25,12 +40,29 @@ const updateRemarksSchema = z.object({
 
 const completeQCSchema = z.object({
   orderId: z.string().uuid("Invalid order ID"),
+  items: z
+    .array(
+      z.object({
+        item_name: z.string().min(1, "Item name is required"),
+        style_id: z.string().nullable().optional(),
+        style_name: z.string().nullable().optional(),
+        color: z.string().nullable().optional(),
+        size: z.string().min(1, "Size is required"),
+        passed_quantity: z.number().int().min(0, "Passed quantity cannot be negative").nullable().optional(),
+        remarks: z.string().max(1000).nullable().optional(),
+      })
+    )
+    .optional(),
   note: z.string().max(1000, "Note cannot exceed 1000 characters").optional(),
 });
 
+/**
+ * Start Quality Check for an order
+ * Uses authoritative Stage 8 Packing output as input.
+ */
 export async function startQualityCheck(orderId: string, remarks?: string) {
   try {
-    const admin = await requireAdmin();
+    await requireAdmin();
 
     const parsed = startQCSchema.safeParse({ orderId, remarks });
     if (!parsed.success) {
@@ -39,120 +71,6 @@ export async function startQualityCheck(orderId: string, remarks?: string) {
 
     const supabase = await createClient();
 
-    // 1. Check if a quality_check_records entry already exists for this order
-    const { data: existingQc } = await supabase
-      .from("quality_check_records")
-      .select("id, status, total_quantity")
-      .eq("order_id", parsed.data.orderId)
-      .maybeSingle();
-
-    if (existingQc) {
-      if (existingQc.status === "pending") {
-        // Transition existing record from pending to in_progress
-        const { error: updateErr } = await supabase
-          .from("quality_check_records")
-          .update({
-            status: "in_progress",
-            started_at: new Date().toISOString(),
-            remarks: parsed.data.remarks?.trim() || null,
-            checked_by: admin.id,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingQc.id);
-
-        if (updateErr) {
-          console.error("Error updating QC record status to in_progress:", updateErr);
-          return { error: updateErr.message || "Failed to start quality check" };
-        }
-
-        // Insert history record
-        await supabase.from("quality_check_history").insert({
-          quality_check_id: existingQc.id,
-          order_id: parsed.data.orderId,
-          from_status: "pending",
-          to_status: "in_progress",
-          note: parsed.data.remarks?.trim() || "Quality check inspection started",
-          changed_by: admin.id,
-        });
-
-        // Ensure order status is quality_check
-        await supabase
-          .from("orders")
-          .update({ status: "quality_check", updated_at: new Date().toISOString() })
-          .eq("id", parsed.data.orderId);
-
-        revalidatePath("/admin/quality-check");
-        revalidatePath(`/admin/quality-check/${orderId}`);
-        revalidatePath("/admin/production");
-        revalidatePath(`/admin/production/${orderId}`);
-        revalidatePath("/admin/orders");
-        revalidatePath(`/admin/orders/${orderId}`);
-
-        return { success: true, qcId: existingQc.id, totalQuantity: existingQc.total_quantity };
-      } else if (existingQc.status === "in_progress") {
-        return { success: true, qcId: existingQc.id, totalQuantity: existingQc.total_quantity };
-      } else {
-        return { error: `Quality check is already ${existingQc.status}` };
-      }
-    }
-
-    // 2. If no QC record exists, check if order is already in quality_check status
-    const { data: orderData } = await supabase
-      .from("orders")
-      .select("id, status, requirement_id")
-      .eq("id", parsed.data.orderId)
-      .single();
-
-    if (orderData && orderData.status === "quality_check") {
-      // Calculate total quantity from requirement_items snapshot
-      const { data: items } = await supabase
-        .from("requirement_items")
-        .select("quantity")
-        .eq("requirement_id", orderData.requirement_id);
-
-      const totalQty = (items || []).reduce((acc, i) => acc + (i.quantity || 0), 0);
-
-      const { data: newQc, error: insertErr } = await supabase
-        .from("quality_check_records")
-        .insert({
-          order_id: parsed.data.orderId,
-          status: "in_progress",
-          total_quantity: totalQty,
-          checked_quantity: 0,
-          passed_quantity: 0,
-          defective_quantity: 0,
-          remarks: parsed.data.remarks?.trim() || null,
-          started_at: new Date().toISOString(),
-          checked_by: admin.id,
-        })
-        .select("id")
-        .single();
-
-      if (insertErr || !newQc) {
-        console.error("Error creating QC record for quality_check order:", insertErr);
-        return { error: insertErr?.message || "Failed to start quality check" };
-      }
-
-      await supabase.from("quality_check_history").insert({
-        quality_check_id: newQc.id,
-        order_id: parsed.data.orderId,
-        from_status: "pending",
-        to_status: "in_progress",
-        note: parsed.data.remarks?.trim() || "Quality check started",
-        changed_by: admin.id,
-      });
-
-      revalidatePath("/admin/quality-check");
-      revalidatePath(`/admin/quality-check/${orderId}`);
-      revalidatePath("/admin/production");
-      revalidatePath(`/admin/production/${orderId}`);
-      revalidatePath("/admin/orders");
-      revalidatePath(`/admin/orders/${orderId}`);
-
-      return { success: true, qcId: newQc.id, totalQuantity: totalQty };
-    }
-
-    // 3. Otherwise, use the existing RPC for production completed orders
     const { data, error } = await supabase.rpc("start_quality_check", {
       p_order_id: parsed.data.orderId,
       p_remarks: parsed.data.remarks?.trim() || null,
@@ -171,16 +89,171 @@ export async function startQualityCheck(orderId: string, remarks?: string) {
     revalidatePath(`/admin/quality-check/${orderId}`);
     revalidatePath("/admin/production");
     revalidatePath(`/admin/production/${orderId}`);
+    revalidatePath("/admin/packing-delivery");
+    revalidatePath(`/admin/packing-delivery/${orderId}`);
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${orderId}`);
 
-    return { success: true, qcId: data.qc_id, totalQuantity: data.total_quantity };
+    return {
+      success: true,
+      qcId: data.qc_id,
+      totalQuantity: data.total_quantity,
+    };
   } catch (err: unknown) {
     console.error("startQualityCheck unexpected error:", err);
     return { error: err instanceof Error ? err.message : "Failed to start quality check" };
   }
 }
 
+/**
+ * Save Quality Check item quantities and remarks.
+ * Automatically verifies packed output server-side and calculates defective = packed - passed.
+ */
+export async function saveOrderQualityCheckItems(
+  orderId: string,
+  items: Array<{
+    item_name: string;
+    style_id?: string | null;
+    style_name?: string | null;
+    color?: string | null;
+    size: string;
+    passed_quantity: number | null;
+    remarks?: string | null;
+  }>
+) {
+  try {
+    await requireAdmin();
+
+    const parsed = saveQCItemsSchema.safeParse({ orderId, items });
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0].message };
+    }
+
+    const supabase = await createClient();
+
+    const { data, error } = await supabase.rpc("save_order_quality_check_items", {
+      p_order_id: parsed.data.orderId,
+      p_items: parsed.data.items,
+    });
+
+    if (error) {
+      console.error("save_order_quality_check_items RPC error:", error);
+      return { error: error.message || "Failed to save quality check progress" };
+    }
+
+    if (data && !data.success) {
+      return { error: data.error || "Failed to save quality check progress" };
+    }
+
+    revalidatePath("/admin/quality-check");
+    revalidatePath(`/admin/quality-check/${orderId}`);
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${orderId}`);
+
+    return {
+      success: true,
+      totalQuantity: data.total_quantity,
+      checkedQuantity: data.checked_quantity,
+      passedQuantity: data.passed_quantity,
+      defectiveQuantity: data.defective_quantity,
+    };
+  } catch (err: unknown) {
+    console.error("saveOrderQualityCheckItems unexpected error:", err);
+    return { error: err instanceof Error ? err.message : "Failed to save quality check progress" };
+  }
+}
+
+/**
+ * Complete Quality Check for an order.
+ * Validates that all operational sizes from Stage 8 Packing have been inspected (0 <= passed <= packed).
+ * Marks QC record as completed and updates order status to 'packed' for Packing & Delivery.
+ */
+export async function completeQualityCheck(
+  orderId: string,
+  itemsOrNote?:
+    | Array<{
+        item_name: string;
+        style_id?: string | null;
+        style_name?: string | null;
+        color?: string | null;
+        size: string;
+        passed_quantity: number | null;
+        remarks?: string | null;
+      }>
+    | string,
+  maybeNote?: string
+) {
+  try {
+    await requireAdmin();
+
+    let items:
+      | Array<{
+          item_name: string;
+          style_id?: string | null;
+          style_name?: string | null;
+          color?: string | null;
+          size: string;
+          passed_quantity: number | null;
+          remarks?: string | null;
+        }>
+      | undefined = undefined;
+    let note: string | undefined = undefined;
+
+    if (Array.isArray(itemsOrNote)) {
+      items = itemsOrNote;
+      note = maybeNote;
+    } else if (typeof itemsOrNote === "string") {
+      note = itemsOrNote;
+    }
+
+    const parsed = completeQCSchema.safeParse({ orderId, items, note });
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0].message };
+    }
+
+    const supabase = await createClient();
+
+    const { data, error } = await supabase.rpc("complete_order_quality_check", {
+      p_order_id: parsed.data.orderId,
+      p_items: parsed.data.items || null,
+      p_note: parsed.data.note?.trim() || null,
+    });
+
+    if (error) {
+      console.error("completeQualityCheck RPC error:", error);
+      return { error: error.message || "Failed to complete quality check" };
+    }
+
+    if (data && !data.success) {
+      return { error: data.error || "Failed to complete quality check" };
+    }
+
+    revalidatePath("/admin/quality-check");
+    revalidatePath(`/admin/quality-check/${orderId}`);
+    revalidatePath("/admin/production");
+    revalidatePath(`/admin/production/${orderId}`);
+    revalidatePath("/admin/packing-delivery");
+    revalidatePath(`/admin/packing-delivery/${orderId}`);
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${orderId}`);
+
+    return {
+      success: true,
+      status: data.status,
+      totalQuantity: data.total_quantity,
+      checkedQuantity: data.checked_quantity,
+      passedQuantity: data.passed_quantity,
+      defectiveQuantity: data.defective_quantity,
+    };
+  } catch (err: unknown) {
+    console.error("completeQualityCheck unexpected error:", err);
+    return { error: err instanceof Error ? err.message : "Failed to complete quality check" };
+  }
+}
+
+/**
+ * Legacy update progress helper for backwards compatibility.
+ */
 export async function updateQualityCheckProgress(
   orderId: string,
   checkedQty: number,
@@ -211,7 +284,6 @@ export async function updateQualityCheckProgress(
 
     const supabase = await createClient();
 
-    // Fetch authoritative QC record to verify total_quantity and status
     const { data: qcRecord, error: fetchErr } = await supabase
       .from("quality_check_records")
       .select("id, status, total_quantity")
@@ -247,7 +319,7 @@ export async function updateQualityCheckProgress(
 
     revalidatePath("/admin/quality-check");
     revalidatePath(`/admin/quality-check/${orderId}`);
-    revalidatePath(`/admin/production/${orderId}`);
+    revalidatePath("/admin/production/${orderId}");
     revalidatePath(`/admin/orders/${orderId}`);
 
     return {
@@ -262,6 +334,9 @@ export async function updateQualityCheckProgress(
   }
 }
 
+/**
+ * Update general QC remarks.
+ */
 export async function updateQualityCheckRemarks(orderId: string, remarks: string) {
   try {
     const profile = await requireAdmin();
@@ -272,10 +347,8 @@ export async function updateQualityCheckRemarks(orderId: string, remarks: string
     }
 
     const supabase = await createClient();
-
     const trimmed = parsed.data.remarks.trim();
 
-    // Fetch existing QC record
     const { data: qcRecord, error: fetchErr } = await supabase
       .from("quality_check_records")
       .select("id, status, remarks")
@@ -299,7 +372,6 @@ export async function updateQualityCheckRemarks(orderId: string, remarks: string
       return { error: "Failed to update remarks" };
     }
 
-    // Insert history entry for remark update
     if (trimmed) {
       await supabase.from("quality_check_history").insert({
         quality_check_id: qcRecord.id,
@@ -318,49 +390,5 @@ export async function updateQualityCheckRemarks(orderId: string, remarks: string
   } catch (err: unknown) {
     console.error("updateQualityCheckRemarks unexpected error:", err);
     return { error: err instanceof Error ? err.message : "Failed to update remarks" };
-  }
-}
-
-export async function completeQualityCheck(orderId: string, note?: string) {
-  try {
-    await requireAdmin();
-
-    const parsed = completeQCSchema.safeParse({ orderId, note });
-    if (!parsed.success) {
-      return { error: parsed.error.issues[0].message };
-    }
-
-    const supabase = await createClient();
-
-    const { data, error } = await supabase.rpc("complete_quality_check", {
-      p_order_id: parsed.data.orderId,
-      p_resolution_note: parsed.data.note?.trim() || null,
-    });
-
-    if (error) {
-      console.error("completeQualityCheck RPC error:", error);
-      return { error: error.message || "Failed to complete quality check" };
-    }
-
-    if (data && !data.success) {
-      return { error: data.error || "Failed to complete quality check" };
-    }
-
-    revalidatePath("/admin/quality-check");
-    revalidatePath(`/admin/quality-check/${orderId}`);
-    revalidatePath("/admin/production");
-    revalidatePath(`/admin/production/${orderId}`);
-    revalidatePath("/admin/orders");
-    revalidatePath(`/admin/orders/${orderId}`);
-
-    return {
-      success: true,
-      status: data.status,
-      passedQuantity: data.passed_quantity,
-      defectiveQuantity: data.defective_quantity,
-    };
-  } catch (err: unknown) {
-    console.error("completeQualityCheck unexpected error:", err);
-    return { error: err instanceof Error ? err.message : "Failed to complete quality check" };
   }
 }

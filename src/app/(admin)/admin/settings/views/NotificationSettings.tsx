@@ -66,7 +66,7 @@ export function NotificationSettings({ initialData }: NotificationSettingsProps)
       action={
         <div className="flex items-center gap-2">
           {isDirty && (
-            <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-semibold text-status-warning bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
               Unsaved Changes
             </span>
           )}
@@ -169,7 +169,7 @@ export function NotificationSettings({ initialData }: NotificationSettingsProps)
           <Button
             type="submit"
             disabled={loading || !isDirty}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
           >
             {loading ? (
               <>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
 import { OrderReportRow, PaginatedResult, GlobalReportFilters } from "../../types";
 import { ExportReportButton } from "../components/ExportReportButton";
+import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 
 interface OrderReportTabProps {
   report: PaginatedResult<OrderReportRow>;
@@ -31,11 +32,11 @@ const getStatusBadge = (status: string) => {
     case "confirmed":
       return "bg-blue-100 text-blue-800 border-blue-200";
     case "production":
-      return "bg-indigo-100 text-indigo-800 border-indigo-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "quality_check":
-      return "bg-purple-100 text-purple-800 border-purple-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "packed":
-      return "bg-teal-100 text-teal-800 border-teal-200";
+      return "bg-evenvibe-light text-evenvibe-deep border-evenvibe-light";
     case "dispatched":
       return "bg-cyan-100 text-cyan-800 border-cyan-200";
     case "in_transit":
@@ -54,10 +55,10 @@ export function OrderReportTab({ report, filters, onPageChange }: OrderReportTab
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
-      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
+      <CardHeader className="py-3.5 px-4 border-b bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <CardTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-            <ShoppingCart className="h-4 w-4 text-emerald-600" />
+            <ShoppingCart className="h-4 w-4 text-evenvibe-primary" />
             Order Lifecycle Report ({totalCount})
           </CardTitle>
           <CardDescription className="text-xs mt-0.5">
@@ -66,7 +67,9 @@ export function OrderReportTab({ report, filters, onPageChange }: OrderReportTab
         </div>
         <ExportReportButton tabName="orders" tabLabel="Order Report" filters={filters} />
       </CardHeader>
-      <div className="overflow-x-auto">
+
+      {/* Desktop Table View (>= 768px) */}
+      <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
@@ -109,10 +112,38 @@ export function OrderReportTab({ report, filters, onPageChange }: OrderReportTab
         </Table>
       </div>
 
+      {/* Mobile Card View (< 768px) */}
+      <div className="md:hidden space-y-3 p-3 bg-slate-50/50">
+        {data.length === 0 ? (
+          <div className="text-center py-8 text-xs text-slate-500 bg-white rounded-lg border border-slate-200">
+            No orders found matching the selected filters.
+          </div>
+        ) : (
+          data.map((o) => (
+            <MobileCard key={o.orderId}>
+              <MobileCardField label="Order Number" value={<span className="font-mono font-semibold">{o.orderNumber}</span>} />
+              <MobileCardField label="School" value={o.schoolName} />
+              <MobileCardField label="Order Date" value={formatDate(o.orderDate)} />
+              <MobileCardField label="Total Students" value={o.totalStudents} />
+              <MobileCardField label="Total Items" value={<span className="font-bold">{o.totalItems}</span>} />
+              <MobileCardField
+                label="Current Status"
+                value={
+                  <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${getStatusBadge(o.status)}`}>
+                    {o.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </Badge>
+                }
+              />
+              <MobileCardField label="Last Updated" value={formatDate(o.lastUpdated)} />
+            </MobileCard>
+          ))
+        )}
+      </div>
+
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
-          <p className="text-xs text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3 border-t bg-slate-50/50">
+          <p className="text-xs text-muted-foreground text-center sm:text-left">
             Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} orders
           </p>
           <div className="flex items-center gap-1">
