@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/server";
+import { ensureOrderDeliveryStudentItems } from "@/app/(admin)/admin/packing-delivery/actions";
 
 export interface DeliveredOrderOption {
   id: string;
@@ -180,10 +181,10 @@ export async function getReceivedStudentsForOrder(orderId: string): Promise<Rece
       `)
       .eq("order_id", orderId);
 
-    // If empty, attempt sync RPC
+    // If empty, attempt sync RPC and fallback
     if (!delItems || delItems.length === 0) {
       try {
-        await supabase.rpc("sync_order_delivery_student_items", { p_order_id: orderId });
+        await ensureOrderDeliveryStudentItems(supabase, orderId);
         const retryRes = await supabase
           .from("order_delivery_student_items")
           .select(`
@@ -206,7 +207,7 @@ export async function getReceivedStudentsForOrder(orderId: string): Promise<Rece
           .eq("order_id", orderId);
         delItems = retryRes.data || [];
       } catch (e) {
-        console.warn("sync_order_delivery_student_items warning:", e);
+        console.warn("ensureOrderDeliveryStudentItems warning:", e);
       }
     }
 

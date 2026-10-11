@@ -16,7 +16,6 @@ import { signupSchool, SignupFormValues } from "./actions"
 // Define the schema here again for client-side validation to match server
 const signupSchema = z.object({
   schoolName: z.string().trim().min(3, "School name must be at least 3 characters"),
-  schoolCode: z.string().trim().min(2, "School code is required"),
   address: z.string().trim().optional(),
   city: z.string().trim().optional(),
   district: z.string().trim().optional(),
@@ -107,27 +106,29 @@ const LeftColumn = () => (
 );
 
 const RightColumn = () => (
-  <div className="hidden lg:block lg:w-[25%] xl:w-[25%] relative z-0 bg-[#EAF6E5]/40 overflow-hidden lg:sticky lg:top-0 lg:h-[100svh]">
-    <svg className="absolute left-0 top-0 h-full w-[150px] z-20 text-[#F7F9F6] fill-current" viewBox="0 0 100 100" preserveAspectRatio="none">
-      <path d="M0,0 Q100,50 0,100 Z" />
-    </svg>
-    <div className="absolute top-24 right-16 z-30 transform rotate-[-4deg]">
-      <h3 className="font-serif italic text-3xl xl:text-4xl leading-tight text-[#17452D]/90 text-right">
-        Uniforms <br />
-        for a brighter <br />
-        tomorrow
-      </h3>
-      <div className="h-0.5 w-24 bg-[#65B741]/60 mt-4 ml-auto rounded-full rotate-[-2deg]" />
+  <div className="hidden lg:block lg:w-[25%] xl:w-[25%] z-0 bg-[#EAF6E5]/40 overflow-hidden lg:sticky lg:top-0 lg:h-[100svh]">
+    <div className="relative w-full h-full">
+      <svg className="absolute left-0 top-0 h-full w-[150px] z-20 text-[#F7F9F6] fill-current" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <path d="M0,0 Q100,50 0,100 Z" />
+      </svg>
+      <div className="absolute top-24 right-16 z-30 transform rotate-[-4deg]">
+        <h3 className="font-serif italic text-3xl xl:text-4xl leading-tight text-[#17452D]/90 text-right">
+          Uniforms <br />
+          for a brighter <br />
+          tomorrow
+        </h3>
+        <div className="h-0.5 w-24 bg-[#65B741]/60 mt-4 ml-auto rounded-full rotate-[-2deg]" />
+      </div>
+      <Image
+        src="/images/login-school-campus.jpg"
+        alt="Premium modern school campus"
+        fill
+        priority
+        sizes="(min-width: 1024px) 50vw, 100vw"
+        className="object-cover opacity-90 mix-blend-multiply"
+      />
+      <div className="absolute inset-0 bg-gradient-to-tr from-[#65B741]/20 to-transparent" />
     </div>
-    <Image
-      src="/images/login-school-campus.jpg"
-      alt="Premium modern school campus"
-      fill
-      priority
-      sizes="(min-width: 1024px) 50vw, 100vw"
-      className="object-cover opacity-90 mix-blend-multiply"
-    />
-    <div className="absolute inset-0 bg-gradient-to-tr from-[#65B741]/20 to-transparent" />
   </div>
 );
 
@@ -224,17 +225,10 @@ export default function SignupPage() {
               <div className="space-y-5">
                 <h4 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2 uppercase tracking-wider">School Information</h4>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div>
-                    <Label htmlFor="schoolName" className={labelClass}>School Name *</Label>
-                    <Input id="schoolName" {...register("schoolName")} placeholder="Enter school name" className={inputClass} />
-                    {errors.schoolName && <p className="text-xs text-[#EF4444] mt-1.5 font-medium">{errors.schoolName.message}</p>}
-                  </div>
-                  <div>
-                    <Label htmlFor="schoolCode" className={labelClass}>School Code *</Label>
-                    <Input id="schoolCode" {...register("schoolCode")} placeholder="Unique identifier" className={inputClass} />
-                    {errors.schoolCode && <p className="text-xs text-[#EF4444] mt-1.5 font-medium">{errors.schoolCode.message}</p>}
-                  </div>
+                <div>
+                  <Label htmlFor="schoolName" className={labelClass}>School Name *</Label>
+                  <Input id="schoolName" {...register("schoolName")} placeholder="Enter school name" className={inputClass} />
+                  {errors.schoolName && <p className="text-xs text-[#EF4444] mt-1.5 font-medium">{errors.schoolName.message}</p>}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

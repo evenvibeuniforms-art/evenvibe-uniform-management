@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export async function login(formData: FormData) {
   const email = formData.get('email') as string
@@ -14,7 +15,7 @@ export async function login(formData: FormData) {
 
   const supabase = await createClient()
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data: authData, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   })
@@ -30,8 +31,8 @@ export async function login(formData: FormData) {
     return { error: 'Unable to sign in right now. Please try again.' }
   }
 
-  const { data: userData, error: userError } = await supabase.auth.getUser()
-  if (userError || !userData.user) {
+  const user = authData?.user
+  if (!user) {
     await supabase.auth.signOut()
     return { error: 'Authentication failed. Please try again.' }
   }
@@ -41,7 +42,7 @@ export async function login(formData: FormData) {
   const { data: profilesData, error: profileError } = await supabase
     .from("profiles")
     .select("role, is_active, school_id")
-    .eq("id", userData.user.id)
+    .eq("id", user.id)
     .limit(1);
 
   if (profileError) {
@@ -54,7 +55,26 @@ export async function login(formData: FormData) {
   // Fallback: If profile doesn't exist, this is not an account verification error.
   // It might be an incomplete signup. But we must not duplicate profiles if it exists.
   if (!profile) {
-    const { error: rpcError } = await supabase.rpc('register_school');
+    let rpcError = null;
+    if (authData?.session?.access_token) {
+      const authedClient = createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
+        {
+          global: {
+            headers: {
+              Authorization: `Bearer ${authData.session.access_token}`,
+            },
+          },
+        }
+      );
+      const { error: err } = await authedClient.rpc('register_school');
+      rpcError = err;
+    } else {
+      const { error: err } = await supabase.rpc('register_school');
+      rpcError = err;
+    }
+
     if (rpcError) {
       await supabase.auth.signOut();
       if (rpcError.message?.includes('School code already exists')) {
@@ -66,7 +86,7 @@ export async function login(formData: FormData) {
     const { data: newProfilesData } = await supabase
       .from("profiles")
       .select("role, is_active, school_id")
-      .eq("id", userData.user.id)
+      .eq("id", user.id)
       .limit(1);
 
     if (newProfilesData && newProfilesData.length > 0) {

@@ -103,6 +103,23 @@ function ColorManagementModalBody({
     return styles.find((s) => s.id === selectedStyleId) || null;
   }, [styles, selectedStyleId]);
 
+  // Helper to format style display label (e.g. "VIGNESH TSHIRT • TSHIRT (All)") with fallback
+  const getStyleDisplayName = (style?: UniformStyleWithDetails | null) => {
+    if (!style) return "Choose Uniform Style";
+    const name = style.style_name?.trim() || style.item_name?.trim() || "Uniform Style";
+    const item = style.item_name?.trim() || "Uniform";
+    const gender = style.gender || "All";
+    return `${name} • ${item} (${gender})`;
+  };
+
+  // Precomputed items list for Base UI Select so labels resolve automatically
+  const styleSelectItems = useMemo(() => {
+    return styles.map((s) => ({
+      value: s.id,
+      label: getStyleDisplayName(s),
+    }));
+  }, [styles]);
+
   // Sorted applicable classes for current style
   const applicableClasses = useMemo(() => {
     if (!currentStyle) return [];
@@ -210,7 +227,8 @@ function ColorManagementModalBody({
       if (res.error) {
         toast.error(res.error);
       } else {
-        toast.success(`Colors saved for ${currentStyle.style_name}.`);
+        const savedName = currentStyle.style_name?.trim() || currentStyle.item_name || "uniform style";
+        toast.success(`Colors saved for ${savedName}.`);
         onSaved(currentStyle.id, res.colors);
         onClose();
       }
@@ -250,14 +268,20 @@ function ColorManagementModalBody({
             <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
               1. Select Uniform Style <span className="text-status-error">*</span>
             </Label>
-            <Select value={selectedStyleId} onValueChange={handleSelectStyle}>
+            <Select
+              value={selectedStyleId}
+              onValueChange={handleSelectStyle}
+              items={styleSelectItems}
+            >
               <SelectTrigger className="bg-white border-slate-300 text-xs font-medium">
-                <SelectValue placeholder="Choose Uniform Style" />
+                <SelectValue placeholder="Choose Uniform Style">
+                  {currentStyle ? getStyleDisplayName(currentStyle) : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {styles.map((s) => (
                   <SelectItem key={s.id} value={s.id} className="text-xs">
-                    {s.style_name} • {s.item_name} ({s.gender || "All"})
+                    {getStyleDisplayName(s)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -301,7 +325,11 @@ function ColorManagementModalBody({
                   <Label className="text-[11px] text-slate-600">Select Class</Label>
                   <Select value={selectedClassTarget} onValueChange={(val) => setSelectedClassTarget(val || "all")}>
                     <SelectTrigger className="bg-slate-50 text-xs h-8">
-                      <SelectValue placeholder="Select Class" />
+                      <SelectValue placeholder="Select Class">
+                        {selectedClassTarget === "all"
+                          ? `★ All Applicable Classes (${applicableClasses.length})`
+                          : selectedClassTarget || undefined}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="text-xs font-semibold text-evenvibe-deep">

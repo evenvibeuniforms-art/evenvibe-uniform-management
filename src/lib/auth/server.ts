@@ -1,17 +1,32 @@
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { AppRole } from "@/types/database";
 
 export const getCurrentUser = cache(async () => {
-  const supabase = await createClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  
-  if (error || !user) {
+  const cookieStore = await cookies();
+  const allCookies = cookieStore.getAll();
+  const hasAuthCookies = allCookies.some(
+    (c) => c.name.includes("-auth-token") || (c.name.startsWith("sb-") && c.name.includes("token"))
+  );
+
+  if (!hasAuthCookies) {
     return null;
   }
-  
-  return user;
+
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
+    
+    if (error || !user) {
+      return null;
+    }
+    
+    return user;
+  } catch {
+    return null;
+  }
 });
 
 export const getCurrentProfile = cache(async () => {

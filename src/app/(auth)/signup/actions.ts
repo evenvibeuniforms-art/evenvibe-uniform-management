@@ -1,11 +1,11 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 
 const signupSchema = z.object({
   schoolName: z.string().trim().min(3, "School name must be at least 3 characters"),
-  schoolCode: z.string().trim().min(2, "School code is required"),
   address: z.string().trim().optional(),
   city: z.string().trim().optional(),
   district: z.string().trim().optional(),
@@ -26,6 +26,40 @@ const signupSchema = z.object({
 
 export type SignupFormValues = z.infer<typeof signupSchema>;
 
+/**
+ * Generate a unique school code server-side to satisfy database constraints
+ * without requiring the registrant to provide or see one.
+ */
+async function generateUniqueSchoolCode(supabase: Awaited<ReturnType<typeof createClient>>, schoolName: string): Promise<string> {
+  const words = schoolName.trim().replace(/[^a-zA-Z0-9\s]/g, "").split(/\s+/).filter(Boolean);
+  let prefix = "";
+  if (words.length >= 2) {
+    prefix = words.map((w) => w[0].toUpperCase()).join("").substring(0, 4);
+  } else if (words.length === 1) {
+    prefix = words[0].substring(0, 4).toUpperCase();
+  }
+  if (!prefix || prefix.length < 2) {
+    prefix = "SCH";
+  }
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    const candidate = `${prefix}-${randomDigits}`;
+
+    const { data } = await supabase
+      .from("schools")
+      .select("id")
+      .eq("school_code", candidate)
+      .maybeSingle();
+
+    if (!data) {
+      return candidate;
+    }
+  }
+
+  return `${prefix}-${Date.now().toString().slice(-6)}`;
+}
+
 export async function signupSchool(formData: SignupFormValues) {
   try {
     // 1. Server-side validation
@@ -33,7 +67,10 @@ export async function signupSchool(formData: SignupFormValues) {
 
     const supabase = await createClient();
 
-    // 2. Call Supabase Auth signUp, passing onboarding data into safe user_metadata
+    // 2. Generate unique school code on server for database compatibility
+    const generatedSchoolCode = await generateUniqueSchoolCode(supabase, data.schoolName);
+
+    // 3. Call Supabase Auth signUp, passing onboarding data into safe user_metadata
     // Do NOT pass school_id, role, or is_active!
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.adminEmail,
@@ -41,7 +78,7 @@ export async function signupSchool(formData: SignupFormValues) {
       options: {
         data: {
           onboarding_school_name: data.schoolName,
-          onboarding_school_code: data.schoolCode,
+          onboarding_school_code: generatedSchoolCode,
           onboarding_address: data.address || null,
           onboarding_city: data.city || null,
           onboarding_district: data.district || null,
@@ -69,7 +106,25 @@ export async function signupSchool(formData: SignupFormValues) {
     // 3. If a session was immediately established (Email Confirmation disabled)
     // we can securely execute the onboarding right now.
     if (authData.session) {
-      const { error: rpcError } = await supabase.rpc('register_school');
+      let rpcError = null;
+      if (authData.session.access_token) {
+        const authedClient = createSupabaseClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
+          {
+            global: {
+              headers: {
+                Authorization: `Bearer ${authData.session.access_token}`,
+              },
+            },
+          }
+        );
+        const { error } = await authedClient.rpc('register_school');
+        rpcError = error;
+      } else {
+        const { error } = await supabase.rpc('register_school');
+        rpcError = error;
+      }
       
       // Immediately sign out since the account is pending approval anyway
       await supabase.auth.signOut();

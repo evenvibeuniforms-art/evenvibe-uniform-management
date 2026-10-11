@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -30,7 +30,6 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MobileCard, MobileCardField } from "@/components/ui/mobile-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,7 +53,33 @@ import {
   markOrderDelivered,
   uploadDeliveryProofImages,
   deleteDeliveryProofImage,
+  saveDeliveryBatchActualQuantities,
+  createNextDeliveryBatch,
+  completeDeliveryBatch,
 } from "../actions";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import {
+  OrderDeliveryActualItem,
+  OrderDeliveryReturn,
+  OrderFollowupDispatch,
+  OrderDeliveryBatch,
+} from "@/types/database";
+import {
+  AdminDeliveryQuantityMatrix,
+  MatrixItem,
+} from "./AdminDeliveryQuantityMatrix";
+import { AdminDeliveryExtraShortView } from "./AdminDeliveryExtraShortView";
+import { AdminDeliveryReturnsView } from "./AdminDeliveryReturnsView";
+import { AdminDeliveryFollowupDispatchesView } from "./AdminDeliveryFollowupDispatchesView";
+import {
+  AdminDeliveryPrintDocuments,
+  PrintableDocumentType,
+} from "./AdminDeliveryPrintDocuments";
 
 export interface DeliveryItemRow {
   id: string;
@@ -126,6 +151,19 @@ interface AdminPackingDeliveryDetailsViewProps {
   packingHistory: HistoryItem[];
   orderStatusHistory: OrderStatusHistoryItem[];
   proofImages?: DeliveryProofImage[];
+  savedActualItems?: OrderDeliveryActualItem[];
+  deliveryReturns?: OrderDeliveryReturn[];
+  followupDispatches?: OrderFollowupDispatch[];
+  deliveryBatches?: OrderDeliveryBatch[];
+  requirementItems?: Array<{
+    id: string;
+    item_name: string;
+    style_id?: string | null;
+    style_name?: string | null;
+    color?: string | null;
+    size: string;
+    quantity: number;
+  }>;
 }
 
 export default function AdminPackingDeliveryDetailsView({
@@ -136,6 +174,11 @@ export default function AdminPackingDeliveryDetailsView({
   packingHistory,
   orderStatusHistory,
   proofImages = [],
+  savedActualItems = [],
+  deliveryReturns = [],
+  followupDispatches = [],
+  deliveryBatches = [],
+  requirementItems = [],
 }: AdminPackingDeliveryDetailsViewProps) {
   const router = useRouter();
 
@@ -148,8 +191,11 @@ export default function AdminPackingDeliveryDetailsView({
     ],
   });
 
-  // Section 3: Authoritative QC Completion Rule
-  const isQcCompleted = qcRecord?.status === "completed" || qcRecord?.status === "passed";
+  // Section 3: Authoritative QC Completion Rule (or Production Bypassed)
+  const isQcCompleted =
+    qcRecord?.status === "completed" ||
+    qcRecord?.status === "passed" ||
+    (!qcRecord && ["confirmed", "packed", "dispatched", "in_transit", "delivered"].includes(order.status));
 
   // Section 11: Delivery Statuses
   const isDelivered = order.status === "delivered";
@@ -163,11 +209,6 @@ export default function AdminPackingDeliveryDetailsView({
     }
     return qcRecord?.passed_quantity || 0;
   }, [deliveryItems, qcRecord?.passed_quantity]);
-
-  const deliveredQuantity = isDelivered ? totalApprovedQuantity : 0;
-  const pendingQuantity = Math.max(0, totalApprovedQuantity - deliveredQuantity);
-  const deliveryProgressPercent =
-    totalApprovedQuantity > 0 ? Math.round((deliveredQuantity / totalApprovedQuantity) * 100) : 0;
 
   // Active state representation
   const deliveryStatus: "pending_qc" | "ready" | "in_progress" | "dispatched" | "delivered" =
@@ -206,10 +247,787 @@ export default function AdminPackingDeliveryDetailsView({
     }
   };
 
+  // Section: Delivery Quantities Matrix & Multi-Batch Consignment State
+  const [activeTab, setActiveTab] = useState<string>("matrix");
+
+  // 1. All original ordered items across the entire order (authoritative baseline)
+  const allOriginalItems: MatrixItem[] = useMemo(() => {
+    const map = new Map<string, MatrixItem>();
+    const sourceList =
+      requirementItems && requirementItems.length > 0
+        ? requirementItems.map((r) => ({
+            id: r.id,
+            styleName: r.style_name?.trim() || "Standard",
+            itemName: r.item_name?.trim() || "Uniform Item",
+            color: r.color?.trim() || "Default",
+            size: r.size?.trim() || "Standard",
+            quantity: r.quantity || 0,
+          }))
+        : deliveryItems.map((d) => ({
+            id: d.id,
+            styleName: d.styleName?.trim() || "Standard",
+            itemName: d.itemName?.trim() || "Uniform Item",
+            color: d.color?.trim() || "Default",
+            size: d.size?.trim() || "Standard",
+            quantity: d.quantity || 0,
+          }));
+
+    for (const it of sourceList) {
+      const k = `${it.styleName}_${it.itemName}_${it.color}_${it.size}`;
+      if (map.has(k)) {
+        map.get(k)!.originalQuantity += it.quantity;
+      } else {
+        map.set(k, {
+          id: it.id,
+          styleName: it.styleName,
+          itemName: it.itemName,
+          color: it.color,
+          size: it.size,
+          originalQuantity: it.quantity,
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [requirementItems, deliveryItems]);
+
+  // 2. Existing batch list sorted by batch number ascending
+  const existingBatchList: OrderDeliveryBatch[] = useMemo(() => {
+    if (deliveryBatches && deliveryBatches.length > 0) {
+      return [...deliveryBatches].sort((a, b) => a.batch_number - b.batch_number);
+    }
+    // Fallback if legacy rows exist in savedActualItems before migration
+    if (savedActualItems && savedActualItems.length > 0) {
+      const distinctNums = Array.from(new Set(savedActualItems.map((s) => s.batch_number || 1))).sort((a, b) => a - b);
+      return distinctNums.map((num) => ({
+        id: `batch-${num}`,
+        order_id: order.id,
+        batch_number: num,
+        batch_reference: `BATCH-${String(num).padStart(3, "0")}`,
+        status: ["dispatched", "in_transit", "delivered"].includes(order.status) ? (order.status as "dispatched" | "delivered") : "draft",
+        courier_name: order.courier_name,
+        tracking_number: order.tracking_number,
+        estimated_delivery: order.estimated_delivery,
+        remarks: order.delivery_remarks || null,
+        created_by: null,
+        created_at: order.created_at,
+        updated_at: order.updated_at,
+        dispatched_at: order.shipped_at,
+        delivered_at: order.delivered_at,
+      }));
+    }
+    return [];
+  }, [deliveryBatches, savedActualItems, order]);
+
+  // 3. Finalized batches (quantities physically dispatched or delivered)
+  const finalizedBatches = useMemo(() => {
+    return existingBatchList.filter((b) =>
+      ["dispatched", "in_transit", "delivered"].includes(b.status)
+    );
+  }, [existingBatchList]);
+
+  // 4. Sum of finalized delivered quantities per combination (Independent Non-Netting Rule)
+  const finalizedQuantitiesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const finBatchNums = new Set(finalizedBatches.map((b) => b.batch_number));
+    if (finBatchNums.size === 0 && ["dispatched", "in_transit", "delivered"].includes(order.status)) {
+      finBatchNums.add(1);
+    }
+
+    for (const s of savedActualItems) {
+      const bNum = s.batch_number || 1;
+      if (finBatchNums.has(bNum)) {
+        const k = `${s.style_name.trim()}_${s.item_name.trim()}_${s.color.trim()}_${s.size.trim()}`;
+        const prev = map.get(k) || 0;
+        map.set(k, prev + s.actual_quantity);
+      }
+    }
+    return map;
+  }, [finalizedBatches, savedActualItems, order.status]);
+
+  // 5. Active returns per combination (reduces accepted quantity, reappears as pending)
+  const returnsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const ret of deliveryReturns) {
+      if (ret.status === "cancelled") continue;
+      const k = `${ret.style_name.trim()}_${ret.item_name.trim()}_${ret.color.trim()}_${ret.size.trim()}`;
+      const prev = map.get(k) || 0;
+      map.set(k, prev + ret.quantity);
+    }
+    return map;
+  }, [deliveryReturns]);
+
+  // 6. Remaining and Extra quantities per combination:
+  // Accepted/Retained = max(0, Finalized Delivered - Active Returns)
+  // Remaining = max(0, Original - Accepted/Retained)
+  // Extra = max(0, Accepted/Retained - Original)
+  const remainingQuantitiesMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { original: number; finalized: number; returned: number; accepted: number; remaining: number; extra: number }
+    >();
+    for (const item of allOriginalItems) {
+      const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+      const fin = finalizedQuantitiesMap.get(k) || 0;
+      const ret = returnsMap.get(k) || 0;
+      const accepted = Math.max(0, fin - ret);
+      const remaining = Math.max(0, item.originalQuantity - accepted);
+      const extra = Math.max(0, accepted - item.originalQuantity);
+      map.set(k, {
+        original: item.originalQuantity,
+        finalized: fin,
+        returned: ret,
+        accepted,
+        remaining,
+        extra,
+      });
+    }
+    return map;
+  }, [allOriginalItems, finalizedQuantitiesMap, returnsMap]);
+
+  // Total remaining pieces pending across entire order
+  const totalOrderRemaining = useMemo(() => {
+    let sum = 0;
+    for (const info of remainingQuantitiesMap.values()) {
+      sum += info.remaining;
+    }
+    return sum;
+  }, [remainingQuantitiesMap]);
+
+  const totalOriginalOrderPieces = useMemo(() => {
+    return allOriginalItems.reduce((acc, it) => acc + it.originalQuantity, 0);
+  }, [allOriginalItems]);
+
+  const totalFinalizedDeliveredPieces = useMemo(() => {
+    let sum = 0;
+    for (const info of remainingQuantitiesMap.values()) {
+      sum += info.finalized;
+    }
+    return sum;
+  }, [remainingQuantitiesMap]);
+
+  const totalExtraPieces = useMemo(() => {
+    let sum = 0;
+    for (const info of remainingQuantitiesMap.values()) {
+      sum += info.extra;
+    }
+    return sum;
+  }, [remainingQuantitiesMap]);
+
+  // 6. Active Draft Batch & Next Batch Number
+  const activeDraftBatch = useMemo(() => {
+    return existingBatchList.find((b) => b.status === "draft");
+  }, [existingBatchList]);
+
+  const activeBatchNumber = useMemo(() => {
+    if (activeDraftBatch) return activeDraftBatch.batch_number;
+    const maxNum = existingBatchList.reduce((max, b) => Math.max(max, b.batch_number), 0);
+    return maxNum === 0 ? 1 : maxNum + 1;
+  }, [activeDraftBatch, existingBatchList]);
+
+  const activeBatchReference = useMemo(() => {
+    return activeDraftBatch?.batch_reference || `BATCH-${String(activeBatchNumber).padStart(3, "0")}`;
+  }, [activeDraftBatch, activeBatchNumber]);
+
+  // 7. Selected Batch View: "active" | batch_number | "consolidated"
+  const [selectedBatchView, setSelectedBatchView] = useState<number | "active" | "consolidated">(() => {
+    if (totalOrderRemaining > 0) return "active";
+    if (existingBatchList.length > 0) return existingBatchList[existingBatchList.length - 1].batch_number;
+    return "consolidated";
+  });
+
+  // 8. Filter completed groups for next delivery entry (Requirement 3 & 4)
+  const activeMatrixItems = useMemo(() => {
+    return allOriginalItems
+      .filter((it) => {
+        const k = `${it.styleName}_${it.itemName}_${it.color}_${it.size}`;
+        const rem = remainingQuantitiesMap.get(k)?.remaining || 0;
+        return rem > 0;
+      })
+      .map((it) => {
+        const k = `${it.styleName}_${it.itemName}_${it.color}_${it.size}`;
+        const rem = remainingQuantitiesMap.get(k)?.remaining || 0;
+        return {
+          ...it,
+          originalQuantity: it.originalQuantity,
+          pendingQuantity: rem,
+        };
+      });
+  }, [allOriginalItems, remainingQuantitiesMap]);
+
+  // 9. Active batch input quantities state & validation errors
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [activeBatchActuals, setActiveBatchActuals] = useState<Record<string, string>>({});
+
+  const handleQuantityChange = (key: string, val: string) => {
+    setActiveBatchActuals((prev) => ({ ...prev, [key]: val }));
+    if (validationErrors[key]) {
+      setValidationErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+    }
+  };
+
+  const handleFillMissingZeroes = () => {
+    setActiveBatchActuals((prev) => {
+      const updated = { ...prev };
+      for (const item of activeMatrixItems) {
+        const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+        if (updated[k] === undefined || updated[k].trim() === "") {
+          updated[k] = "0";
+        }
+      }
+      return updated;
+    });
+    setValidationErrors({});
+    toast.success("Filled missing delivery quantities with 0.");
+  };
+
+  // Helper to determine the currently selected batch record (if viewing a specific number)
+  const selectedBatchRecord = useMemo(() => {
+    if (typeof selectedBatchView === "number") {
+      return existingBatchList.find((b) => b.batch_number === selectedBatchView) || null;
+    }
+    return null;
+  }, [selectedBatchView, existingBatchList]);
+
+  // Target batch number being operated on (if active view or draft batch view)
+  const targetBatchNumber = useMemo(() => {
+    if (typeof selectedBatchView === "number" && selectedBatchRecord?.status === "draft") {
+      return selectedBatchView;
+    }
+    return activeBatchNumber;
+  }, [selectedBatchView, selectedBatchRecord, activeBatchNumber]);
+
+  // Is the current view an editable batch entry (active entry or draft batch)?
+  const isEditingActiveBatch = useMemo(() => {
+    if (selectedBatchView === "active") return totalOrderRemaining > 0;
+    if (typeof selectedBatchView === "number") {
+      return selectedBatchRecord?.status === "draft";
+    }
+    return false;
+  }, [selectedBatchView, totalOrderRemaining, selectedBatchRecord]);
+
+  // Read-only logic strictly based on the currently selected batch (User Requirement)
+  const isCurrentMatrixReadOnly = useMemo(() => {
+    if (selectedBatchView === "consolidated") return true;
+    if (selectedBatchView === "active") {
+      return totalOrderRemaining === 0;
+    }
+    if (typeof selectedBatchView === "number") {
+      // Draft batches are editable!
+      if (selectedBatchRecord?.status === "draft") {
+        return false;
+      }
+      // Dispatched, in_transit, delivered batches are read-only to protect audit trail
+      return true;
+    }
+    return true;
+  }, [selectedBatchView, totalOrderRemaining, selectedBatchRecord]);
+
+  // Dynamic matrix items for current selected view
+  const currentMatrixItems: MatrixItem[] = useMemo(() => {
+    if (isEditingActiveBatch) {
+      return activeMatrixItems;
+    }
+    if (typeof selectedBatchView === "number") {
+      // In historical/finalized batch view, show ONLY combinations that had positive actual deliveries in that batch
+      const batchItems = savedActualItems.filter(
+        (s) => (s.batch_number || 1) === selectedBatchView && s.actual_quantity > 0
+      );
+      if (batchItems.length > 0) {
+        return batchItems.map((s) => {
+          const k = `${s.style_name.trim()}_${s.item_name.trim()}_${s.color.trim()}_${s.size.trim()}`;
+          const origMatch = allOriginalItems.find(
+            (o) =>
+              o.styleName.trim() === s.style_name.trim() &&
+              o.itemName.trim() === s.item_name.trim() &&
+              o.color.trim() === s.color.trim() &&
+              o.size.trim() === s.size.trim()
+          );
+          const remInfo = remainingQuantitiesMap.get(k);
+          return {
+            id: s.id,
+            styleName: s.style_name.trim(),
+            itemName: s.item_name.trim(),
+            color: s.color.trim(),
+            size: s.size.trim(),
+            originalQuantity: origMatch ? origMatch.originalQuantity : s.original_quantity,
+            pendingQuantity: remInfo ? remInfo.remaining : 0,
+          };
+        });
+      }
+      return [];
+    }
+    return allOriginalItems.map((it) => {
+      const k = `${it.styleName}_${it.itemName}_${it.color}_${it.size}`;
+      return {
+        ...it,
+        pendingQuantity: remainingQuantitiesMap.get(k)?.remaining || 0,
+      };
+    });
+  }, [
+    isEditingActiveBatch,
+    activeMatrixItems,
+    selectedBatchView,
+    savedActualItems,
+    allOriginalItems,
+    remainingQuantitiesMap,
+  ]);
+
+  // Dynamic actual quantities for current selected view (pre-populates active pending items with '0' or draft value)
+  const currentActualQuantities: Record<string, string> = useMemo(() => {
+    if (isEditingActiveBatch) {
+      const map: Record<string, string> = {};
+      const draftItems = savedActualItems.filter((s) => (s.batch_number || 1) === targetBatchNumber);
+      const draftMap = new Map<string, number>();
+      for (const it of draftItems) {
+        const k = `${it.style_name.trim()}_${it.item_name.trim()}_${it.color.trim()}_${it.size.trim()}`;
+        draftMap.set(k, it.actual_quantity);
+      }
+      for (const it of activeMatrixItems) {
+        const k = `${it.styleName}_${it.itemName}_${it.color}_${it.size}`;
+        if (activeBatchActuals[k] !== undefined) {
+          map[k] = activeBatchActuals[k];
+        } else if (draftMap.has(k)) {
+          map[k] = String(draftMap.get(k));
+        } else {
+          map[k] = "0";
+        }
+      }
+      return map;
+    }
+    if (typeof selectedBatchView === "number") {
+      const map: Record<string, string> = {};
+      const batchItems = savedActualItems.filter(
+        (s) => (s.batch_number || 1) === selectedBatchView && s.actual_quantity > 0
+      );
+      for (const s of batchItems) {
+        const k = `${s.style_name.trim()}_${s.item_name.trim()}_${s.color.trim()}_${s.size.trim()}`;
+        map[k] = String(s.actual_quantity);
+      }
+      return map;
+    }
+    // Consolidated
+    const map: Record<string, string> = {};
+    for (const item of allOriginalItems) {
+      const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+      map[k] = String(finalizedQuantitiesMap.get(k) || 0);
+    }
+    return map;
+  }, [
+    isEditingActiveBatch,
+    targetBatchNumber,
+    activeBatchActuals,
+    savedActualItems,
+    activeMatrixItems,
+    selectedBatchView,
+    allOriginalItems,
+    finalizedQuantitiesMap,
+  ]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (isCurrentMatrixReadOnly) return false;
+    for (const item of activeMatrixItems) {
+      const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+      const currentVal = activeBatchActuals[k] ?? "";
+      const savedMatch = savedActualItems.find(
+        (s) =>
+          (s.batch_number || 1) === targetBatchNumber &&
+          s.style_name.trim() === item.styleName &&
+          s.item_name.trim() === item.itemName &&
+          s.color.trim() === item.color &&
+          s.size.trim() === item.size
+      );
+      const savedVal = savedMatch !== undefined ? String(savedMatch.actual_quantity) : "";
+      if (currentVal !== savedVal) return true;
+    }
+    return false;
+  }, [
+    isCurrentMatrixReadOnly,
+    activeMatrixItems,
+    activeBatchActuals,
+    savedActualItems,
+    targetBatchNumber,
+  ]);
+
+  // Reconciliation for current view
+  const reconciliationData = useMemo(() => {
+    let totalOriginal = 0;
+    let totalActual = 0;
+    let totalExtra = 0;
+    let totalShort = 0;
+    let totalNotDelivered = 0;
+
+    const rows: Array<{
+      styleName: string;
+      itemName: string;
+      color: string;
+      size: string;
+      originalQuantity: number;
+      actualQuantity: number;
+      difference: number;
+      classification: "exact" | "extra" | "short" | "not_delivered";
+    }> = [];
+
+    for (const item of currentMatrixItems) {
+      const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+      const valStr = currentActualQuantities[k];
+      const orig = item.originalQuantity;
+      totalOriginal += orig;
+
+      const actNum = valStr !== undefined && valStr.trim() !== "" ? parseInt(valStr, 10) : 0;
+      const act = isNaN(actNum) || actNum < 0 ? 0 : actNum;
+      totalActual += act;
+
+      const diff = act - orig;
+      let classification: "exact" | "extra" | "short" | "not_delivered";
+
+      if (diff === 0) {
+        classification = "exact";
+      } else if (diff > 0) {
+        classification = "extra";
+        totalExtra += diff;
+      } else {
+        if (act === 0 && orig > 0) {
+          classification = "not_delivered";
+          totalNotDelivered += orig;
+          totalShort += orig;
+        } else {
+          classification = "short";
+          totalShort += orig - act;
+        }
+      }
+
+      rows.push({
+        styleName: item.styleName,
+        itemName: item.itemName,
+        color: item.color,
+        size: item.size,
+        originalQuantity: orig,
+        actualQuantity: act,
+        difference: diff,
+        classification,
+      });
+    }
+
+    return {
+      rows,
+      summary: {
+        totalOriginal,
+        totalActual,
+        totalExtra,
+        totalShort,
+        totalNotDelivered,
+      },
+    };
+  }, [currentMatrixItems, currentActualQuantities]);
+
+  // Consolidated reconciliation data across all finalized batches (for Extra/Short & summary cards)
+  const consolidatedReconciliationData = useMemo(() => {
+    let totalOriginal = 0;
+    let totalActual = 0;
+    let totalExtra = 0;
+    let totalShort = 0;
+    let totalNotDelivered = 0;
+
+    const rows: Array<{
+      styleName: string;
+      itemName: string;
+      color: string;
+      size: string;
+      originalQuantity: number;
+      actualQuantity: number;
+      difference: number;
+      classification: "exact" | "extra" | "short" | "not_delivered";
+    }> = [];
+
+    for (const item of allOriginalItems) {
+      const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+      const orig = item.originalQuantity;
+      const rec = remainingQuantitiesMap.get(k);
+      // Accepted/retained quantity = max(0, finalized delivered - active returned)
+      const act = rec ? rec.accepted : (finalizedQuantitiesMap.get(k) || 0);
+      const rem = rec ? rec.remaining : Math.max(0, orig - act);
+      const extra = rec ? rec.extra : Math.max(0, act - orig);
+      const diff = act - orig;
+
+      totalOriginal += orig;
+      totalActual += act;
+
+      let classification: "exact" | "extra" | "short" | "not_delivered";
+
+      if (diff === 0) {
+        classification = "exact";
+      } else if (diff > 0) {
+        classification = "extra";
+        totalExtra += extra;
+      } else {
+        if (act === 0 && orig > 0) {
+          classification = "not_delivered";
+          totalNotDelivered += orig;
+          totalShort += rem;
+        } else {
+          classification = "short";
+          totalShort += rem;
+        }
+      }
+
+      rows.push({
+        styleName: item.styleName,
+        itemName: item.itemName,
+        color: item.color,
+        size: item.size,
+        originalQuantity: orig,
+        actualQuantity: act,
+        difference: diff,
+        classification,
+      });
+    }
+
+    return {
+      rows,
+      summary: {
+        totalOriginal,
+        totalActual,
+        totalExtra,
+        totalShort,
+        totalNotDelivered,
+      },
+    };
+  }, [allOriginalItems, remainingQuantitiesMap, finalizedQuantitiesMap]);
+
+  const [isSavingQuantities, setIsSavingQuantities] = useState(false);
+  const [isFinalizingBatch, setIsFinalizingBatch] = useState(false);
+
+  // Validate active batch: ensures every active pending combination has an explicit non-negative number
+  // Highlights missing or invalid fields and does NOT validate completed/hidden items.
+  const validateActiveBatchQuantities = () => {
+    const errors: Record<string, string> = {};
+    let firstErrorMsg: string | null = null;
+
+    for (const item of activeMatrixItems) {
+      const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+      const valStr = currentActualQuantities[k];
+
+      if (valStr === undefined || valStr.trim() === "") {
+        errors[k] = "Required (enter 0 if none delivered)";
+        if (!firstErrorMsg) {
+          firstErrorMsg = `Please enter actual delivery quantity for ${item.styleName} (Size ${item.size}). Enter 0 if none delivered.`;
+        }
+        continue;
+      }
+
+      const num = parseInt(valStr.trim(), 10);
+      if (isNaN(num) || num < 0 || String(num) !== valStr.trim()) {
+        errors[k] = "Must be a whole number (0, 1, 2...)";
+        if (!firstErrorMsg) {
+          firstErrorMsg = `Invalid quantity for ${item.styleName} (Size ${item.size}). Must be a non-negative whole number (0, 1, 2...).`;
+        }
+      }
+    }
+
+    setValidationErrors(errors);
+
+    if (firstErrorMsg) {
+      toast.error(firstErrorMsg);
+      return false;
+    }
+
+    return true;
+  };
+
+  // Save Draft: preserve incomplete entries without blocking, defaulting blanks to 0
+  const handleSaveActualQuantities = async () => {
+    // Only check that entered non-empty fields are valid non-negative numbers
+    const invalidErrors: Record<string, string> = {};
+    for (const item of activeMatrixItems) {
+      const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+      const valStr = currentActualQuantities[k];
+      if (valStr !== undefined && valStr.trim() !== "") {
+        const num = parseInt(valStr.trim(), 10);
+        if (isNaN(num) || num < 0 || String(num) !== valStr.trim()) {
+          invalidErrors[k] = "Must be a non-negative whole number";
+        }
+      }
+    }
+
+    if (Object.keys(invalidErrors).length > 0) {
+      setValidationErrors(invalidErrors);
+      toast.error("Please enter valid numbers before saving draft.");
+      return;
+    }
+
+    setIsSavingQuantities(true);
+    try {
+      const payload = activeMatrixItems.map((item) => {
+        const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+        const valStr = currentActualQuantities[k];
+        const act = valStr !== undefined && valStr.trim() !== "" ? parseInt(valStr.trim(), 10) : 0;
+        return {
+          styleName: item.styleName,
+          itemName: item.itemName,
+          color: item.color,
+          size: item.size,
+          originalQuantity: item.originalQuantity,
+          actualQuantity: isNaN(act) || act < 0 ? 0 : act,
+        };
+      });
+
+      const targetBatchRef =
+        existingBatchList.find((b) => b.batch_number === targetBatchNumber)?.batch_reference ||
+        `BATCH-${String(targetBatchNumber).padStart(3, "0")}`;
+
+      const res = await saveDeliveryBatchActualQuantities({
+        orderId: order.id,
+        batchNumber: targetBatchNumber,
+        batchReference: targetBatchRef,
+        courierName: courierName || null,
+        trackingNumber: trackingNumber || null,
+        estimatedDelivery: estimatedDelivery || null,
+        remarks: deliveryRemarks || null,
+        status: "draft",
+        items: payload,
+      });
+
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(`Draft saved for Batch #${targetBatchNumber}. Quantities do not reduce pending totals until finalized.`);
+        router.refresh();
+      }
+    } catch {
+      toast.error("Failed to save delivery batch quantities.");
+    } finally {
+      setIsSavingQuantities(false);
+    }
+  };
+
+  // Finalize Batch: enforce that every active item has an explicit valid quantity
+  const handleFinalizeDeliveryBatch = async () => {
+    if (!validateActiveBatchQuantities()) return;
+
+    // Check if target batch has already been finalized
+    const targetBatch = existingBatchList.find((b) => b.batch_number === targetBatchNumber);
+    if (targetBatch && ["dispatched", "in_transit", "delivered"].includes(targetBatch.status)) {
+      toast.error(`Batch #${targetBatchNumber} has already been finalized and cannot be modified.`);
+      return;
+    }
+
+    setIsFinalizingBatch(true);
+    try {
+      const payload = activeMatrixItems.map((item) => {
+        const k = `${item.styleName}_${item.itemName}_${item.color}_${item.size}`;
+        const act = parseInt(currentActualQuantities[k].trim(), 10);
+        return {
+          styleName: item.styleName,
+          itemName: item.itemName,
+          color: item.color,
+          size: item.size,
+          originalQuantity: item.originalQuantity,
+          actualQuantity: isNaN(act) ? 0 : act,
+        };
+      });
+
+      const targetBatchRef =
+        existingBatchList.find((b) => b.batch_number === targetBatchNumber)?.batch_reference ||
+        `BATCH-${String(targetBatchNumber).padStart(3, "0")}`;
+
+      const res = await saveDeliveryBatchActualQuantities({
+        orderId: order.id,
+        batchNumber: targetBatchNumber,
+        batchReference: targetBatchRef,
+        courierName: courierName || null,
+        trackingNumber: trackingNumber || null,
+        estimatedDelivery: estimatedDelivery || null,
+        remarks: deliveryRemarks || null,
+        status: "dispatched",
+        items: payload,
+      });
+
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(`Batch #${targetBatchNumber} finalized and dispatched successfully!`);
+        router.refresh();
+      }
+    } catch {
+      toast.error("Failed to finalize delivery batch.");
+    } finally {
+      setIsFinalizingBatch(false);
+    }
+  };
+
+  const [isCreatingBatch, setIsCreatingBatch] = useState(false);
+  const handleCreateNextBatch = async () => {
+    setIsCreatingBatch(true);
+    try {
+      const res = await createNextDeliveryBatch(order.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("Created new delivery batch.");
+        setSelectedBatchView("active");
+        router.refresh();
+      }
+    } catch {
+      toast.error("Failed to create next delivery batch");
+    } finally {
+      setIsCreatingBatch(false);
+    }
+  };
+
+  const handlePrintStyle = (styleName: string) => {
+    const bNum =
+      selectedBatchView === "active"
+        ? activeBatchNumber
+        : typeof selectedBatchView === "number"
+        ? selectedBatchView
+        : undefined;
+    const bRef =
+      selectedBatchView === "active"
+        ? activeBatchReference
+        : typeof selectedBatchView === "number"
+        ? `BATCH-${String(selectedBatchView).padStart(3, "0")}`
+        : undefined;
+
+    handleTriggerPrint({
+      type: "style_delivery_sheet",
+      styleName,
+      batchNumber: bNum,
+      batchReference: bRef,
+    });
+  };
+
+  // Printable Document State
+  const [activePrintDoc, setActivePrintDoc] = useState<PrintableDocumentType | null>(null);
+
+  const handleTriggerPrint = (doc: PrintableDocumentType) => {
+    setActivePrintDoc(doc);
+    setTimeout(() => {
+      window.print();
+    }, 120);
+  };
+
+  useEffect(() => {
+    if (!activePrintDoc) return;
+    const handleAfterPrint = () => {
+      setActivePrintDoc(null);
+    };
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => {
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, [activePrintDoc]);
+
   // Modal states
   const [showStartModal, setShowStartModal] = useState(false);
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [showDeliveredModal, setShowDeliveredModal] = useState(false);
+  const [showCompleteBatchModal, setShowCompleteBatchModal] = useState(false);
+  const [batchToComplete, setBatchToComplete] = useState<OrderDeliveryBatch | null>(null);
+  const [completeBatchRemarks, setCompleteBatchRemarks] = useState("");
   const [startRemarks, setStartRemarks] = useState("");
   const [showHistory, setShowHistory] = useState(false);
 
@@ -218,6 +1036,7 @@ export default function AdminPackingDeliveryDetailsView({
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
   const [isMarkingDelivered, setIsMarkingDelivered] = useState(false);
+  const [isCompletingBatch, setIsCompletingBatch] = useState(false);
 
   // Delivery Proof state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -441,6 +1260,36 @@ export default function AdminPackingDeliveryDetailsView({
     }
   };
 
+  // Section 16B: Complete Specific Consignment Batch Handler
+  const handleCompleteBatch = async () => {
+    if (!batchToComplete) return;
+    setIsCompletingBatch(true);
+    try {
+      const res = await completeDeliveryBatch(
+        order.id,
+        batchToComplete.batch_number,
+        completeBatchRemarks.trim() || undefined
+      );
+
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(
+          `Consignment Batch #${batchToComplete.batch_number} marked as Delivered successfully.`
+        );
+        setShowCompleteBatchModal(false);
+        setCompleteBatchRemarks("");
+        setBatchToComplete(null);
+        router.refresh();
+      }
+    } catch (err: unknown) {
+      console.error("Complete batch error:", err);
+      toast.error("Failed to complete batch delivery.");
+    } finally {
+      setIsCompletingBatch(false);
+    }
+  };
+
   // Section 29: Excel Export
   const handleExportExcel = async () => {
     if (deliveryItems.length === 0) {
@@ -488,15 +1337,25 @@ export default function AdminPackingDeliveryDetailsView({
           Back to Delivery List
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
-            className="hidden sm:inline-flex items-center gap-1.5"
+            onClick={() => handleTriggerPrint({ type: "delivery_sheet" })}
+            className="inline-flex items-center gap-1.5 text-xs bg-white dark:bg-slate-900 shadow-2xs"
           >
-            <Printer className="w-4 h-4 text-slate-500" />
-            Print Note
+            <Printer className="w-3.5 h-3.5 text-slate-500" />
+            Print Delivery Sheet
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleTriggerPrint({ type: "extra_short_report" })}
+            className="inline-flex items-center gap-1.5 text-xs bg-white dark:bg-slate-900 shadow-2xs"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-500" />
+            Print Extra / Short Report
           </Button>
 
           {deliveryItems.length > 0 && (
@@ -504,9 +1363,9 @@ export default function AdminPackingDeliveryDetailsView({
               variant="outline"
               size="sm"
               onClick={handleExportExcel}
-              className="inline-flex items-center gap-1.5"
+              className="inline-flex items-center gap-1.5 text-xs bg-white dark:bg-slate-900 shadow-2xs"
             >
-              <Download className="w-4 h-4 text-slate-500" />
+              <Download className="w-3.5 h-3.5 text-slate-500" />
               Export Excel
             </Button>
           )}
@@ -578,13 +1437,27 @@ export default function AdminPackingDeliveryDetailsView({
           )}
 
           {deliveryStatus === "dispatched" && (
-            <Button
-              onClick={() => setShowDeliveredModal(true)}
-              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              Mark as Delivered
-            </Button>
+            selectedBatchRecord && ["dispatched", "in_transit"].includes(selectedBatchRecord.status) ? (
+              <Button
+                onClick={() => {
+                  setBatchToComplete(selectedBatchRecord);
+                  setCompleteBatchRemarks(selectedBatchRecord.remarks || "");
+                  setShowCompleteBatchModal(true);
+                }}
+                className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Complete Batch #{selectedBatchRecord.batch_number} Delivery
+              </Button>
+            ) : (
+              <Button
+                onClick={() => setShowDeliveredModal(true)}
+                className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-medium gap-2 shadow-sm"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Mark as Delivered
+              </Button>
+            )
           )}
 
           {deliveryStatus === "delivered" && (
@@ -623,111 +1496,142 @@ export default function AdminPackingDeliveryDetailsView({
         </Card>
       )}
 
-      {/* Section 10: Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
-        {/* Card 1: Approved Quantity */}
-        <Card className="border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-emerald-200">
-          <CardHeader className="p-5 pb-3">
+      {/* Section 10: Reconciliation Summary Cards (Consolidated Order Fulfillment) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 md:gap-4">
+        {/* Card 1: Original Order Pieces */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md">
+          <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between">
-              <CardDescription className="text-xs uppercase font-bold text-slate-500 tracking-wider">
-                Approved Quantity
+              <CardDescription className="text-[11px] uppercase font-bold text-slate-500 tracking-wider">
+                Original Order
               </CardDescription>
-              <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
-                <CheckCircle2 className="w-4 h-4 text-evenvibe-primary dark:text-emerald-400" />
+              <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md">
+                <Package className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
               </div>
             </div>
-            <CardTitle className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-2">
-              {totalApprovedQuantity}
+            <CardTitle className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-1">
+              {consolidatedReconciliationData.summary.totalOriginal}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-5 pt-0">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-800/50 pt-3 mt-1">
-              QC Passed physical units
+          <CardContent className="p-4 pt-0">
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+              Confirmed ordered pieces
             </p>
           </CardContent>
         </Card>
 
-        {/* Card 2: Items */}
-        <Card className="border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-slate-300">
-          <CardHeader className="p-5 pb-3">
+        {/* Card 2: Actual Delivery Pieces */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-emerald-300">
+          <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between">
-              <CardDescription className="text-xs uppercase font-bold text-slate-500 tracking-wider">
-                Items
+              <CardDescription className="text-[11px] uppercase font-bold text-evenvibe-deep dark:text-emerald-400 tracking-wider">
+                Actual Delivered
               </CardDescription>
-              <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                <Package className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+              <div className="p-1.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-md">
+                <CheckCircle2 className="w-3.5 h-3.5 text-evenvibe-primary dark:text-emerald-400" />
               </div>
             </div>
-            <CardTitle className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-2">
-              {deliveryItems.length}
+            <CardTitle className="text-2xl font-black text-evenvibe-deep dark:text-emerald-400 mt-1">
+              {consolidatedReconciliationData.summary.totalActual}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-5 pt-0">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-800/50 pt-3 mt-1">
-              Approved style/size rows
+          <CardContent className="p-4 pt-0">
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+              Finalized pieces sent
             </p>
           </CardContent>
         </Card>
 
-        {/* Card 3: Delivered */}
-        <Card className="border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-emerald-200">
-          <CardHeader className="p-5 pb-3">
+        {/* Card 3: Extra Pieces */}
+        <Card className="border-blue-200 dark:border-blue-900 bg-blue-50/20 dark:bg-blue-950/20 shadow-sm transition-all hover:shadow-md hover:border-blue-300">
+          <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between">
-              <CardDescription className="text-xs uppercase font-bold text-slate-500 tracking-wider">
-                Delivered
+              <CardDescription className="text-[11px] uppercase font-bold text-blue-700 dark:text-blue-300 tracking-wider">
+                Extra Pieces
               </CardDescription>
-              <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
-                <Truck className="w-4 h-4 text-evenvibe-primary dark:text-emerald-400" />
+              <div className="p-1.5 bg-blue-100 dark:bg-blue-900/40 rounded-md">
+                <span className="text-xs font-black text-blue-700 dark:text-blue-300">+</span>
               </div>
             </div>
-            <CardTitle className="text-2xl font-black text-evenvibe-primary dark:text-emerald-400 mt-2">
-              {deliveredQuantity}
+            <CardTitle className="text-2xl font-black text-blue-700 dark:text-blue-300 mt-1">
+              +{consolidatedReconciliationData.summary.totalExtra}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-5 pt-0">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-800/50 pt-3 mt-1">
-              {isDelivered ? "100% completed" : "Pending arrival"}
+          <CardContent className="p-4 pt-0">
+            <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400 border-t border-blue-100 dark:border-blue-900/50 pt-2 mt-1">
+              Surplus physical units
             </p>
           </CardContent>
         </Card>
 
-        {/* Card 4: Pending Delivery */}
-        <Card className="border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 transition-all hover:shadow-md hover:border-amber-200">
-          <CardHeader className="p-5 pb-3">
+        {/* Card 4: Short Pieces */}
+        <Card className="border-amber-200 dark:border-amber-900 bg-amber-50/20 dark:bg-amber-950/20 shadow-sm transition-all hover:shadow-md hover:border-amber-300">
+          <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between">
-              <CardDescription className="text-xs uppercase font-bold text-slate-500 tracking-wider">
-                Pending Delivery
+              <CardDescription className="text-[11px] uppercase font-bold text-amber-700 dark:text-amber-300 tracking-wider">
+                Pending / Short
               </CardDescription>
-              <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-status-warning dark:text-amber-400" />
+              <div className="p-1.5 bg-amber-100 dark:bg-amber-900/40 rounded-md">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-700 dark:text-amber-300" />
               </div>
             </div>
-            <CardTitle className="text-2xl font-black text-status-warning dark:text-amber-400 mt-2">
-              {pendingQuantity}
+            <CardTitle className="text-2xl font-black text-amber-700 dark:text-amber-300 mt-1">
+              {totalOrderRemaining > 0 ? `-${totalOrderRemaining}` : "0"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-5 pt-0">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-800/50 pt-3 mt-1">
-              Units in delivery pipeline
+          <CardContent className="p-4 pt-0">
+            <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 border-t border-amber-100 dark:border-amber-900/50 pt-2 mt-1">
+              Pending pieces to deliver
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 5: Not Delivered Pieces */}
+        <Card className="border-rose-200 dark:border-rose-900 bg-rose-50/20 dark:bg-rose-950/20 shadow-sm transition-all hover:shadow-md hover:border-rose-300 col-span-2 sm:col-span-1">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between">
+              <CardDescription className="text-[11px] uppercase font-bold text-rose-700 dark:text-rose-300 tracking-wider">
+                Unfulfilled Groups
+              </CardDescription>
+              <div className="p-1.5 bg-rose-100 dark:bg-rose-900/40 rounded-md">
+                <span className="text-xs font-black text-rose-700 dark:text-rose-300">0</span>
+              </div>
+            </div>
+            <CardTitle className="text-2xl font-black text-rose-700 dark:text-rose-300 mt-1">
+              {consolidatedReconciliationData.summary.totalNotDelivered > 0
+                ? `-${consolidatedReconciliationData.summary.totalNotDelivered}`
+                : "0"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 border-t border-rose-100 dark:border-rose-900/50 pt-2 mt-1">
+              Sizes with 0 delivered
             </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Delivery Progress Bar */}
-      {totalApprovedQuantity > 0 && (
+      {consolidatedReconciliationData.summary.totalOriginal > 0 && (
         <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs font-medium">
               <span className="text-slate-600 dark:text-slate-300">
-                Delivery Progress: <strong>{deliveredQuantity}</strong> / {totalApprovedQuantity} units
+                Overall Order Delivery Fulfillment: <strong>{consolidatedReconciliationData.summary.totalActual}</strong> / {consolidatedReconciliationData.summary.totalOriginal} ordered pieces
               </span>
-              <span className="text-evenvibe-primary font-bold">{deliveryProgressPercent}%</span>
+              <span className="text-evenvibe-primary font-bold">
+                {Math.round((consolidatedReconciliationData.summary.totalActual / consolidatedReconciliationData.summary.totalOriginal) * 100)}%
+              </span>
             </div>
             <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-evenvibe-primary transition-all duration-300"
-                style={{ width: `${deliveryProgressPercent}%` }}
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.round((consolidatedReconciliationData.summary.totalActual / consolidatedReconciliationData.summary.totalOriginal) * 100)
+                  )}%`,
+                }}
               />
             </div>
           </div>
@@ -735,146 +1639,351 @@ export default function AdminPackingDeliveryDetailsView({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Delivery Items Table */}
+        {/* Left Column: Tabbed Delivery Quantities, Extra/Short, Returns, and Follow-up Dispatches */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
-            <CardHeader className="p-5 md:p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <Package className="w-5 h-5 text-evenvibe-primary" />
-                    Delivery Items
-                  </CardTitle>
-                  <CardDescription className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                    Approved quantities ready for delivery.
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" className="border-slate-200 text-slate-600 text-xs py-1">
-                  {deliveryItems.length} {deliveryItems.length === 1 ? "Row" : "Rows"}
-                </Badge>
-              </div>
-            </CardHeader>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-2 border-slate-200 dark:border-slate-800">
+              <TabsList className="grid grid-cols-2 sm:grid-cols-4 bg-slate-100 dark:bg-slate-800 p-1 h-auto gap-1">
+                <TabsTrigger
+                  value="matrix"
+                  className="text-xs py-2 font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
+                >
+                  Delivery Quantities
+                </TabsTrigger>
+                <TabsTrigger
+                  value="extra-short"
+                  className="text-xs py-2 font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
+                >
+                  Extra & Short ({consolidatedReconciliationData.rows.filter((r) => r.difference !== 0).length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="returns"
+                  className="text-xs py-2 font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
+                >
+                  Returns to School ({deliveryReturns.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="followup"
+                  className="text-xs py-2 font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
+                >
+                  Follow-up Dispatches ({followupDispatches.length})
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-            <CardContent className="p-0">
-              {deliveryItems.length === 0 ? (
-                <div className="p-12 text-center space-y-3">
-                  <Package className="w-12 h-12 text-slate-400 mx-auto" />
-                  <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
-                    No approved pieces are available for delivery.
-                  </h3>
-                  <p className="text-sm text-slate-500 max-w-md mx-auto">
-                    Approved delivery items come strictly from QC Passed physical quantities.
-                    Please ensure Quality Check has been completed with passed items.
-                  </p>
+            <TabsContent value="matrix" className="space-y-4 m-0">
+              {/* Multi-Batch Consignment Navigation & Controls */}
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-evenvibe-primary" />
+                      Delivery Consignment Batches
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Support for multiple deliveries per order. Fulfilled sizes, colors, and styles are automatically hidden from subsequent delivery entry.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline" className="text-xs">
+                      Total Ordered: <strong className="ml-1 text-slate-900 dark:text-slate-100">{totalOriginalOrderPieces}</strong>
+                    </Badge>
+                    <Badge variant="outline" className="text-xs text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300">
+                      Delivered: <strong className="ml-1">{totalFinalizedDeliveredPieces}</strong>
+                    </Badge>
+                    {totalOrderRemaining > 0 ? (
+                      <Badge variant="outline" className="text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/40 border-amber-300">
+                        Pending: <strong className="ml-1">{totalOrderRemaining}</strong>
+                      </Badge>
+                    ) : (
+                      <Badge className="text-xs bg-emerald-600 text-white">
+                        All Items Fulfilled
+                      </Badge>
+                    )}
+                    {totalExtraPieces > 0 && (
+                      <Badge variant="outline" className="text-xs text-blue-700 bg-blue-50 dark:bg-blue-950/40 border-blue-300">
+                        Extra: <strong className="ml-1">+{totalExtraPieces}</strong>
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-left text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50/60 dark:bg-slate-900/60">
-                          <th className="py-3 px-4">Style</th>
-                          <th className="py-3 px-4">Item</th>
-                          <th className="py-3 px-4">Color</th>
-                          <th className="py-3 px-4 text-center">Size</th>
-                          <th className="py-3 px-4 text-center">Quantity</th>
-                          <th className="py-3 px-4 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {deliveryItems.map((item) => (
-                          <tr
-                            key={item.id}
-                            className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+
+                {/* Batch Selector Pills */}
+                <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800">
+                  {existingBatchList.map((batch) => {
+                    const isDraft = batch.status === "draft";
+                    const isSelected =
+                      selectedBatchView === batch.batch_number ||
+                      (selectedBatchView === "active" && isDraft && batch.batch_number === targetBatchNumber);
+                    const isBatchFinalized = ["dispatched", "in_transit", "delivered"].includes(batch.status);
+                    return (
+                      <button
+                        key={batch.batch_number}
+                        type="button"
+                        onClick={() => setSelectedBatchView(batch.batch_number)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                          isSelected
+                            ? isDraft
+                              ? "bg-evenvibe-primary text-white shadow-sm ring-2 ring-emerald-400"
+                              : "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                        }`}
+                      >
+                        <Package className="w-3.5 h-3.5" />
+                        <span>Batch #{batch.batch_number}</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                            batch.status === "delivered"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : isBatchFinalized
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {batch.status}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Active / Next Delivery Entry Pill (only if there are pending items and no draft batch already listed) */}
+                  {totalOrderRemaining > 0 && !activeDraftBatch && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBatchView("active")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        selectedBatchView === "active"
+                          ? "bg-evenvibe-primary text-white shadow-sm ring-2 ring-emerald-400"
+                          : "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Batch #{activeBatchNumber} (Next Delivery Entry)</span>
+                      <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-bold">
+                        {totalOrderRemaining} pcs pending
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Consolidated View Pill */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBatchView("consolidated")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      selectedBatchView === "consolidated"
+                        ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Consolidated / All Deliveries</span>
+                  </button>
+
+                  {/* Button to explicitly create next batch if existing batch is finalized and pending items exist */}
+                  {existingBatchList.length > 0 &&
+                    totalOrderRemaining > 0 &&
+                    !activeDraftBatch && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCreateNextBatch}
+                        disabled={isCreatingBatch}
+                        className="ml-auto text-xs bg-white dark:bg-slate-900 border-dashed border-emerald-400 text-emerald-700 hover:bg-emerald-50 gap-1.5 font-semibold"
+                      >
+                        {isCreatingBatch ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
+                        <span>New Consignment Batch</span>
+                      </Button>
+                    )}
+                </div>
+
+                {/* Status Notice Banner for currently selected view */}
+                <div className="pt-2 text-xs">
+                  {!isCurrentMatrixReadOnly ? (
+                    <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                          Active Entry: Consignment Batch #{targetBatchNumber} (
+                          {existingBatchList.find((b) => b.batch_number === targetBatchNumber)?.batch_reference ||
+                            `BATCH-${String(targetBatchNumber).padStart(3, "0")}`}
+                          )
+                        </p>
+                        <p className="text-emerald-700 dark:text-emerald-300 text-[11px] mt-0.5">
+                          Showing only remaining pending quantities. Fully delivered combinations from earlier batches have been excluded from this entry screen.
+                        </p>
+                      </div>
+                      <Badge className="bg-emerald-600 text-white font-bold shrink-0">
+                        Editable Entry
+                      </Badge>
+                    </div>
+                  ) : typeof selectedBatchView === "number" ? (
+                    <div className="p-3 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">
+                            Viewing Consignment Batch #{selectedBatchView} (
+                            {selectedBatchRecord?.batch_reference ||
+                              `BATCH-${String(selectedBatchView).padStart(3, "0")}`}
+                            )
+                          </p>
+                          <Badge
+                            className={`text-[10px] uppercase font-bold ${
+                              selectedBatchRecord?.status === "delivered"
+                                ? "bg-emerald-600 text-white"
+                                : selectedBatchRecord?.status === "dispatched" || selectedBatchRecord?.status === "in_transit"
+                                ? "bg-blue-600 text-white"
+                                : "bg-amber-600 text-white"
+                            }`}
                           >
-                            <td className="py-3.5 px-4 font-semibold text-slate-800 dark:text-slate-200">
-                              {item.styleName}
-                            </td>
-                            <td className="py-3.5 px-4 font-medium text-slate-700 dark:text-slate-300">
-                              {item.itemName}
-                            </td>
-                            <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
-                              {item.color}
-                            </td>
-                            <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
-                              Size {item.size}
-                            </td>
-                            <td className="py-3.5 px-4 text-center font-bold text-evenvibe-deep dark:text-emerald-400">
-                              <span className="bg-evenvibe-light dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800 px-3 py-1 rounded-md">
-                                {item.quantity}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 text-center">
-                              {item.status === "delivered" ? (
-                                <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
-                                  Delivered
-                                </Badge>
-                              ) : item.status === "dispatched" ? (
-                                <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
-                                  Dispatched
-                                </Badge>
-                              ) : item.status === "in_progress" ? (
-                                <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
-                                  In Progress
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-slate-100 text-slate-700 font-medium px-2.5 py-0.5 text-xs">
-                                  Ready
-                                </Badge>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                            {selectedBatchRecord?.status || "finalized"}
+                          </Badge>
+                        </div>
+                        <p className="text-slate-500 text-[11px] mt-0.5">
+                          {selectedBatchRecord?.status === "delivered"
+                            ? `Delivered on ${selectedBatchRecord.delivered_at ? new Date(selectedBatchRecord.delivered_at).toLocaleDateString() : "record"}. Quantities are locked to preserve audit trail.`
+                            : ["dispatched", "in_transit"].includes(selectedBatchRecord?.status || "")
+                            ? `Dispatched on ${selectedBatchRecord?.dispatched_at ? new Date(selectedBatchRecord.dispatched_at).toLocaleDateString() : "record"}. Ready to mark as delivered upon school receipt.`
+                            : "Historical consignment record. Quantities are locked to preserve delivery audit trail."}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {["dispatched", "in_transit"].includes(selectedBatchRecord?.status || "") && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setBatchToComplete(selectedBatchRecord);
+                              setCompleteBatchRemarks(selectedBatchRecord?.remarks || "");
+                              setShowCompleteBatchModal(true);
+                            }}
+                            className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white font-semibold text-xs gap-1.5 shadow-sm"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Complete Batch #{selectedBatchView} Delivery
+                          </Button>
+                        )}
+                        <Badge variant="outline" className="text-slate-600 font-bold">
+                          Read-Only History
+                        </Badge>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-blue-900 dark:text-blue-200">
+                          Consolidated Order Overview
+                        </p>
+                        <p className="text-blue-700 dark:text-blue-300 text-[11px] mt-0.5">
+                          Cumulative view showing all original confirmed requirements alongside total quantities finalized across all delivery batches.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-blue-700 border-blue-300 font-bold shrink-0">
+                        Cumulative Summary
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                  <div className="md:hidden space-y-3">
-                    {deliveryItems.map((item) => (
-                      <MobileCard key={item.id}>
-                        <MobileCardField label="Style">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">{item.styleName}</span>
-                        </MobileCardField>
-                        <MobileCardField label="Item">
-                          <span className="font-medium text-slate-700 dark:text-slate-300">{item.itemName}</span>
-                        </MobileCardField>
-                        <MobileCardField label="Color">
-                          <span className="text-slate-600 dark:text-slate-400">{item.color}</span>
-                        </MobileCardField>
-                        <MobileCardField label="Size">
-                          <span className="font-bold text-slate-800 dark:text-slate-200">Size {item.size}</span>
-                        </MobileCardField>
-                        <MobileCardField label="Quantity">
-                          <span className="inline-block bg-evenvibe-light dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800 px-2.5 py-0.5 rounded-md font-bold text-evenvibe-deep dark:text-emerald-400">
-                            {item.quantity}
-                          </span>
-                        </MobileCardField>
-                        <MobileCardField label="Status">
-                          {item.status === "delivered" ? (
-                            <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
-                              Delivered
-                            </Badge>
-                          ) : item.status === "dispatched" ? (
-                            <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
-                              Dispatched
-                            </Badge>
-                          ) : item.status === "in_progress" ? (
-                            <Badge className="bg-evenvibe-primary text-white font-medium border-0 px-2.5 py-0.5 text-xs">
-                              In Progress
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-slate-100 text-slate-700 font-medium px-2.5 py-0.5 text-xs">
-                              Ready
-                            </Badge>
-                          )}
-                        </MobileCardField>
-                      </MobileCard>
-                    ))}
-                  </div>
-                </>
+              {/* Completion Banner if all items are completed and viewing active */}
+              {selectedBatchView === "active" && totalOrderRemaining === 0 ? (
+                <Card className="border-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/30 shadow-sm">
+                  <CardContent className="p-6 text-center space-y-3">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
+                    <h3 className="text-base font-bold text-emerald-900 dark:text-emerald-200">
+                      All Ordered Quantities Completely Fulfilled!
+                    </h3>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300 max-w-lg mx-auto">
+                      All original confirmed uniform items ({totalOriginalOrderPieces} pcs) have been fully delivered across finalized delivery batches. No pending quantities remain to deliver.
+                    </p>
+                    <div className="pt-2 flex justify-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedBatchView("consolidated")}
+                        className="bg-white text-xs border-emerald-300 text-emerald-800 font-semibold"
+                      >
+                        View Consolidated Breakdown
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleTriggerPrint({ type: "delivery_sheet" })}
+                        className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white text-xs gap-1.5 font-semibold"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Print Consolidated Delivery Sheet
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <AdminDeliveryQuantityMatrix
+                  matrixItems={currentMatrixItems}
+                  actualQuantities={currentActualQuantities}
+                  onQuantityChange={handleQuantityChange}
+                  onSave={handleSaveActualQuantities}
+                  onSaveDraft={handleSaveActualQuantities}
+                  onFinalizeDelivery={handleFinalizeDeliveryBatch}
+                  isSaving={isSavingQuantities}
+                  isFinalizing={isFinalizingBatch}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  isOrderDelivered={isCurrentMatrixReadOnly}
+                  isReadOnly={isCurrentMatrixReadOnly}
+                  batchLabel={
+                    !isCurrentMatrixReadOnly
+                      ? `Consignment Batch #${targetBatchNumber} (Delivery Entry)`
+                      : typeof selectedBatchView === "number"
+                      ? `Consignment Batch #${selectedBatchView}`
+                      : "Consolidated / All Deliveries"
+                  }
+                  onPrintStyle={handlePrintStyle}
+                  onViewHistory={() => setSelectedBatchView("consolidated")}
+                  validationErrors={validationErrors}
+                  onFillMissingZeroes={handleFillMissingZeroes}
+                />
               )}
-            </CardContent>
-          </Card>
+            </TabsContent>
+
+            <TabsContent value="extra-short" className="space-y-4 m-0">
+              <AdminDeliveryExtraShortView
+                items={consolidatedReconciliationData.rows}
+                summary={consolidatedReconciliationData.summary}
+                onPrintReport={() => handleTriggerPrint({ type: "extra_short_report" })}
+                onOpenFollowupModal={() => setActiveTab("followup")}
+              />
+            </TabsContent>
+
+            <TabsContent value="returns" className="space-y-4 m-0">
+              <AdminDeliveryReturnsView
+                orderId={order.id}
+                orderNumber={order.order_number}
+                schoolId={order.schools?.id || ""}
+                schoolName={order.schools?.name || "School"}
+                returns={deliveryReturns}
+                availableItems={allOriginalItems}
+                onPrintReturnNote={(rec) => handleTriggerPrint({ type: "return_note", record: rec })}
+              />
+            </TabsContent>
+
+            <TabsContent value="followup" className="space-y-4 m-0">
+              <AdminDeliveryFollowupDispatchesView
+                orderId={order.id}
+                orderNumber={order.order_number}
+                schoolId={order.schools?.id || ""}
+                schoolName={order.schools?.name || "School"}
+                followupDispatches={followupDispatches}
+                pendingShortItems={consolidatedReconciliationData.rows.filter((r) => r.difference < 0)}
+                onPrintDispatchSheet={(disp) => handleTriggerPrint({ type: "followup_dispatch", dispatch: disp })}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Right Column: Order Information & Delivery Details */}
@@ -1531,6 +2640,74 @@ export default function AdminPackingDeliveryDetailsView({
         </DialogContent>
       </Dialog>
 
+      {/* MODAL 3B: Complete Specific Batch Delivery Confirmation */}
+      <Dialog open={showCompleteBatchModal} onOpenChange={setShowCompleteBatchModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-evenvibe-primary" />
+              Complete Batch Delivery
+            </DialogTitle>
+            <DialogDescription>
+              Mark Consignment Batch #{batchToComplete?.batch_number} (
+              {batchToComplete?.batch_reference ||
+                `BATCH-${String(batchToComplete?.batch_number || "").padStart(3, "0")}`}
+              ) as Delivered.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2 text-xs space-y-3">
+            <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg space-y-1">
+              <p className="font-semibold text-slate-800 dark:text-slate-200">
+                School: {order.schools?.name || "School"}
+              </p>
+              {batchToComplete?.courier_name && (
+                <p className="text-slate-500">
+                  Courier: {batchToComplete.courier_name}{" "}
+                  {batchToComplete.tracking_number ? `(${batchToComplete.tracking_number})` : ""}
+                </p>
+              )}
+              <p className="text-slate-500 text-[11px] mt-1">
+                Delivered timestamp will be recorded. If any order items remain pending after this batch, the parent order will remain dispatched until subsequent batches complete.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="batch-delivery-remarks" className="text-xs font-medium">
+                Delivery Remarks / Receipt Notes (Optional)
+              </Label>
+              <Textarea
+                id="batch-delivery-remarks"
+                value={completeBatchRemarks}
+                onChange={(e) => setCompleteBatchRemarks(e.target.value)}
+                placeholder="e.g. Received and verified by school administration, signed physical acknowledgment."
+                rows={2}
+                className="text-xs"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowCompleteBatchModal(false)}
+              disabled={isCompletingBatch}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCompleteBatch}
+              disabled={isCompletingBatch}
+              className="bg-evenvibe-primary hover:bg-evenvibe-deep text-white"
+            >
+              {isCompletingBatch ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Batch Delivered"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* MODAL 4: Delete Delivery Proof Image Confirmation */}
       <Dialog open={Boolean(imageToDelete)} onOpenChange={(open) => !open && setImageToDelete(null)}>
         <DialogContent className="sm:max-w-md">
@@ -1594,6 +2771,19 @@ export default function AdminPackingDeliveryDetailsView({
           onIndexChange={(newIdx) => setLightboxIndex(newIdx)}
         />
       )}
+
+      {/* Isolated Print Containers for Browser Print / Save as PDF */}
+      <AdminDeliveryPrintDocuments
+        document={activePrintDoc}
+        orderNumber={order.order_number}
+        schoolName={order.schools?.name || "School"}
+        courierName={courierName}
+        trackingNumber={trackingNumber}
+        estimatedDelivery={estimatedDelivery}
+        actualItems={reconciliationData.rows}
+        summary={reconciliationData.summary}
+        hasUnsavedChanges={hasUnsavedChanges}
+      />
     </div>
   );
 }

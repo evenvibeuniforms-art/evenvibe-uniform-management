@@ -5,9 +5,6 @@ import {
   School,
   Users,
   ShoppingBag,
-  Factory,
-  ClipboardCheck,
-  PackageCheck,
   BarChart3,
   Zap,
 } from "lucide-react";
@@ -39,24 +36,6 @@ const actions: ActionItem[] = [
     description: "Order lifecycle",
   },
   {
-    label: "Production",
-    href: "/admin/production",
-    icon: Factory,
-    description: "Manufacturing queue",
-  },
-  {
-    label: "Quality Check",
-    href: "/admin/quality-check",
-    icon: ClipboardCheck,
-    description: "Inspection batches",
-  },
-  {
-    label: "Packing & Delivery",
-    href: "/admin/packing-delivery",
-    icon: PackageCheck,
-    description: "Dispatch & transit",
-  },
-  {
     label: "Reports & Analytics",
     href: "/admin/reports",
     icon: BarChart3,
@@ -75,7 +54,7 @@ export default function QuickActions() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2.5">
           {actions.map((act) => {
             const Icon = act.icon;
             return (

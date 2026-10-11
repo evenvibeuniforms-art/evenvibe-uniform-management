@@ -122,6 +122,7 @@ export default async function AdminPackingDeliveryPage({
       )
     `)
     .in("status", [
+      "confirmed",
       "packed",
       "dispatched",
       "in_transit",
@@ -144,7 +145,7 @@ export default async function AdminPackingDeliveryPage({
       : o.packing_records;
 
     // Determine category based on prompt Section 16:
-    // Ready for Packing: orders.status = packed AND no packing record exists
+    // Ready for Delivery / Packing: orders.status = confirmed OR (orders.status = packed AND no packing record exists)
     // Packing In Progress: packing_records.status = in_progress
     // Packed: packing_records.status = completed AND orders.status = packed
     // Dispatched: orders.status = dispatched
@@ -164,7 +165,7 @@ export default async function AdminPackingDeliveryPage({
       deliveryCategory = "in_transit";
     } else if (o.status === "delivered") {
       deliveryCategory = "delivered";
-    } else if (o.status === "packed") {
+    } else if (o.status === "confirmed" || o.status === "packed") {
       if (!packing || packing.status === "pending") {
         deliveryCategory = "ready_for_packing";
       } else if (packing.status === "in_progress") {

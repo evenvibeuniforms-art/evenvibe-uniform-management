@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { requireSchoolAdmin } from "@/lib/auth/server";
+import { getCurrentUser, requireSchoolAdmin } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { SidebarNav } from "@/components/school/SidebarNav";
 import { MobileSidebar } from "@/components/school/MobileSidebar";
@@ -22,7 +22,7 @@ export default async function SchoolLayout({
     getSchoolNotifications(1, 10),
   ]);
 
-  const user = (await supabase.auth.getUser()).data.user;
+  const user = await getCurrentUser();
 
   return (
     <div className="flex min-h-screen md:h-screen w-full bg-slate-50 font-sans md:overflow-hidden print:block print:h-auto print:min-h-0">

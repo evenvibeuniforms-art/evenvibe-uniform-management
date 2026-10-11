@@ -89,8 +89,8 @@ const formatDate = (dateString: string, includeTime = false) => {
 const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   submitted: ["under_review"],
   under_review: ["confirmed"],
-  confirmed: ["production"],
-  production: ["quality_check"],
+  confirmed: ["packed", "production"],
+  production: ["packed", "quality_check"],
   quality_check: ["packed"],
   packed: ["dispatched"],
   dispatched: ["in_transit"],
@@ -98,7 +98,10 @@ const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   delivered: [],
 };
 
-const formatStatus = (s: string) => s.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+const formatStatus = (s: string) => {
+  if (s === "packed") return "Delivery / Packed";
+  return s.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+};
 
 const getStatusColor = (s: string) => {
   switch (s) {
@@ -271,6 +274,16 @@ export default function AdminOrderDetailsView({
             </p>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            {["confirmed", "packed", "dispatched", "in_transit", "delivered"].includes(order.status) && (
+              <Button 
+                variant="outline" 
+                className="text-evenvibe-deep border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 flex items-center gap-1.5"
+                onClick={() => router.push(`/admin/packing-delivery/${order.id}`)}
+              >
+                <Truck className="h-4 w-4" />
+                View Delivery
+              </Button>
+            )}
             {(order.status === "confirmed" || order.status === "production") && (
               <Button 
                 variant="outline" 

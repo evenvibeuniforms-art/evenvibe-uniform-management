@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { AlertCircle, Download, ChevronRight, ChevronDown, Scissors, Layers, Shirt } from "lucide-react";
+import { AlertCircle, Download, ChevronRight, ChevronDown, Scissors, Layers, Shirt, Printer } from "lucide-react";
 
 export interface ReqItem {
   id: string;
@@ -41,6 +42,62 @@ export default function AdminOrderQuantityBreakdown({
   const [colorFilter, setColorFilter] = useState<string>("");
   const [sizeFilter, setSizeFilter] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("stitching");
+
+  const [activePrintStyleName, setActivePrintStyleName] = useState<string | null>(null);
+  const [printDate, setPrintDate] = useState<string>("");
+  const [isMounted, setIsMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const handlePrintStyle = (styleName: string) => {
+    setPrintDate(
+      new Date().toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    );
+    setActivePrintStyleName(styleName);
+  };
+
+  useEffect(() => {
+    if (!activePrintStyleName) return;
+
+    document.body.classList.add("printing-style-breakdown");
+
+    const handleAfterPrint = () => {
+      document.body.classList.remove("printing-style-breakdown");
+      setActivePrintStyleName(null);
+    };
+
+    window.addEventListener("afterprint", handleAfterPrint);
+
+    const mediaQueryList = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("print") : null;
+    const handleMediaChange = (mql: MediaQueryListEvent) => {
+      if (!mql.matches) {
+        document.body.classList.remove("printing-style-breakdown");
+        setActivePrintStyleName(null);
+      }
+    };
+    if (mediaQueryList?.addEventListener) {
+      mediaQueryList.addEventListener("change", handleMediaChange);
+    }
+
+    const timer = setTimeout(() => {
+      window.print();
+    }, 150);
+
+    return () => {
+      document.body.classList.remove("printing-style-breakdown");
+      window.removeEventListener("afterprint", handleAfterPrint);
+      if (mediaQueryList?.removeEventListener) {
+        mediaQueryList.removeEventListener("change", handleMediaChange);
+      }
+      clearTimeout(timer);
+    };
+  }, [activePrintStyleName]);
 
   const filteredItems = useMemo(() => {
     return requirementItems.filter((item) => {
@@ -232,6 +289,23 @@ export default function AdminOrderQuantityBreakdown({
 
     return Object.values(groups).sort((a, b) => a.style_name.localeCompare(b.style_name));
   }, [filteredItems]);
+
+  const activePrintStyle = useMemo(() => {
+    if (!activePrintStyleName) return null;
+    return stitchingGroups.find((s) => s.style_name === activePrintStyleName) || null;
+  }, [activePrintStyleName, stitchingGroups]);
+
+  const activeFiltersSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (styleFilter) parts.push(`Style: ${styleFilter}`);
+    if (itemFilter) parts.push(`Item: ${itemFilter}`);
+    if (classFilter) parts.push(`Class: ${classFilter}`);
+    if (sectionFilter) parts.push(`Section: ${sectionFilter}`);
+    if (genderFilter) parts.push(`Gender: ${genderFilter}`);
+    if (colorFilter) parts.push(`Color: ${colorFilter}`);
+    if (sizeFilter) parts.push(`Size: ${sizeFilter}`);
+    return parts;
+  }, [styleFilter, itemFilter, classFilter, sectionFilter, genderFilter, colorFilter, sizeFilter]);
 
   // Class drilldown node logic
   const getGroupedData = (items: ReqItem[], level: "class" | "section" | "gender" | "style" | "item" | "color" | "size") => {
@@ -546,66 +620,103 @@ export default function AdminOrderQuantityBreakdown({
                       <div className="space-y-4 pl-0 sm:pl-2">
                         {Object.values(itemGroup.colors)
                           .sort((a, b) => a.color_name.localeCompare(b.color_name))
-                          .map((colorGroup) => (
-                            <div key={colorGroup.color_name} className="space-y-2.5 p-3.5 rounded-lg border border-slate-200/80 bg-slate-50/50">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Color:</span>
-                                  <Badge
-                                    variant="outline"
-                                    className={
-                                      colorGroup.color_name === "Not specified"
-                                        ? "bg-slate-100 text-slate-600 border-slate-300 font-medium text-xs px-2.5 py-0.5"
-                                        : "bg-blue-50 text-blue-700 border-blue-300 font-bold text-xs px-2.5 py-0.5 shadow-2xs"
-                                    }
-                                  >
-                                    {colorGroup.color_name}
-                                  </Badge>
-                                  <span className="text-xs text-slate-400 font-normal">
-                                    ({Object.keys(colorGroup.sizes).length} sizes)
+                          .map((colorGroup) => {
+                            const sortedSizes = Object.values(colorGroup.sizes).sort((a, b) => {
+                              const numA = parseFloat(a.size);
+                              const numB = parseFloat(b.size);
+                              if (!isNaN(numA) && !isNaN(numB)) {
+                                if (numA !== numB) return numA - numB;
+                              }
+                              return a.size.localeCompare(b.size, undefined, { numeric: true, sensitivity: "base" });
+                            });
+
+                            return (
+                              <div key={colorGroup.color_name} className="space-y-2.5 p-3.5 rounded-lg border border-slate-200/80 bg-slate-50/50">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Color:</span>
+                                    <Badge
+                                      variant="outline"
+                                      className={
+                                        colorGroup.color_name === "Not specified"
+                                          ? "bg-slate-100 text-slate-600 border-slate-300 font-medium text-xs px-2.5 py-0.5"
+                                          : "bg-blue-50 text-blue-700 border-blue-300 font-bold text-xs px-2.5 py-0.5 shadow-2xs"
+                                      }
+                                    >
+                                      {colorGroup.color_name}
+                                    </Badge>
+                                    <span className="text-xs text-slate-400 font-normal">
+                                      ({sortedSizes.length} {sortedSizes.length === 1 ? "size" : "sizes"})
+                                    </span>
+                                  </div>
+                                  <span className="text-xs font-bold text-evenvibe-deep bg-evenvibe-light border border-emerald-200 px-2.5 py-0.5 rounded">
+                                    Total: {colorGroup.totalQuantity} pcs
                                   </span>
                                 </div>
-                                <span className="text-xs font-bold text-evenvibe-deep bg-evenvibe-light border border-emerald-200 px-2.5 py-0.5 rounded">
-                                  Color Subtotal: {colorGroup.totalQuantity} pcs
-                                </span>
-                              </div>
 
-                              {/* Sizes Grid */}
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-1">
-                                {Object.values(colorGroup.sizes)
-                                  .sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }))
-                                  .map((sizeItem) => (
-                                    <div
-                                      key={sizeItem.size}
-                                      className="rounded-lg border border-slate-200 bg-white p-3 hover:border-emerald-500 transition-colors shadow-2xs"
-                                    >
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-bold text-slate-600">Size</span>
-                                        <span className="text-sm font-extrabold text-slate-900">{sizeItem.size}</span>
-                                      </div>
-                                      <div className="text-xl font-black text-evenvibe-deep text-center py-1">
-                                        {sizeItem.quantity}
-                                        <span className="text-[11px] font-normal text-slate-500 ml-1">pcs</span>
-                                      </div>
-
-                                      {/* Class Breakdown tooltip / list if available */}
-                                      {sizeItem.classBreakdown.length > 0 && (
-                                        <div className="text-[10px] text-slate-500 border-t border-slate-100 pt-1 mt-1 truncate">
-                                          {sizeItem.classBreakdown.map((cb, idx) => (
-                                            <span key={idx} className="block truncate">
-                                              {cb.class_name}-{cb.section}: {cb.qty}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
+                                {/* Size / Quantity Table */}
+                                <div className="overflow-x-auto rounded-md border border-slate-200 bg-white shadow-2xs mt-1.5">
+                                  <table className="w-full border-collapse text-sm">
+                                    <thead>
+                                      <tr className="border-b border-slate-200 bg-slate-50/80">
+                                        <th
+                                          scope="col"
+                                          className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-slate-600 bg-slate-100/70 border-r border-slate-200 whitespace-nowrap min-w-[90px]"
+                                        >
+                                          Size
+                                        </th>
+                                        {sortedSizes.map((sizeItem) => (
+                                          <th
+                                            key={sizeItem.size}
+                                            scope="col"
+                                            className="px-4 py-2.5 text-center text-xs font-extrabold text-slate-800 border-r border-slate-200 last:border-r-0 whitespace-nowrap min-w-[52px]"
+                                          >
+                                            {sizeItem.size}
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      <tr className="bg-white hover:bg-slate-50/40 transition-colors">
+                                        <th
+                                          scope="row"
+                                          className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-slate-600 bg-slate-50 border-r border-slate-200 whitespace-nowrap min-w-[90px]"
+                                        >
+                                          Quantity
+                                        </th>
+                                        {sortedSizes.map((sizeItem) => (
+                                          <td
+                                            key={sizeItem.size}
+                                            className="px-4 py-2.5 text-center font-bold text-evenvibe-deep border-r border-slate-200 last:border-r-0 whitespace-nowrap min-w-[52px]"
+                                          >
+                                            {sizeItem.quantity}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                       </div>
                     </div>
                   ))}
+
+                  {/* Style-wise PDF / Print Button */}
+                  <div className="pt-4 border-t border-slate-200/80 flex items-center justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePrintStyle(styleGroup.style_name)}
+                      disabled={activePrintStyleName !== null}
+                      className="bg-white hover:bg-emerald-50 text-slate-700 hover:text-evenvibe-deep border-slate-200 hover:border-emerald-300 font-semibold text-xs shadow-2xs gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-evenvibe-primary" />
+                      <span>PDF / Print</span>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))
@@ -658,6 +769,212 @@ export default function AdminOrderQuantityBreakdown({
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Isolated Print Portal for Selected Style */}
+      {isMounted &&
+        activePrintStyle &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div id="style-print-portal" className="hidden print:block w-full bg-white text-slate-900 p-6 font-sans">
+            {/* Print Header */}
+            <div className="border-b-2 border-slate-900 pb-4 mb-5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h1 className="text-xl font-black tracking-wider uppercase text-slate-900">
+                    EVENVIBE UNIFORMS
+                  </h1>
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-emerald-800 mt-0.5">
+                    STYLE QUANTITY BREAKDOWN REPORT
+                  </h2>
+                </div>
+                <div className="text-right text-xs space-y-0.5">
+                  <p>
+                    <span className="font-semibold text-slate-600">Date: </span>
+                    <span className="font-bold text-slate-900">{printDate}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Metadata Grid */}
+              <div className="grid grid-cols-3 gap-4 mt-3 pt-3 border-t border-slate-200 text-xs">
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
+                    Order Number
+                  </span>
+                  <span className="font-bold text-slate-900 text-sm">{orderNumber}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
+                    School
+                  </span>
+                  <span className="font-bold text-slate-900 text-sm">{schoolName || "—"}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
+                    Style Total Pieces
+                  </span>
+                  <span className="font-bold text-emerald-800 text-sm">
+                    {activePrintStyle.totalQuantity} pcs
+                  </span>
+                </div>
+              </div>
+
+              {/* Active filters summary if applied */}
+              {activeFiltersSummary.length > 0 && (
+                <div className="mt-2.5 pt-2 border-t border-slate-200 text-[11px] text-slate-600">
+                  <span className="font-semibold text-slate-700">Applied Filters: </span>
+                  <span>{activeFiltersSummary.join(", ")}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Style Title & Design Label */}
+            <div className="mb-5 p-3 bg-slate-50 border border-slate-300 rounded-sm flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-black text-slate-900 tracking-wide">
+                  {activePrintStyle.style_name}
+                </h3>
+                <span className="text-xs font-medium text-slate-500">Uniform Style Design</span>
+              </div>
+              <div className="text-right">
+                <span className="inline-block bg-slate-900 text-white font-bold text-xs px-2.5 py-1 rounded">
+                  Style Total: {activePrintStyle.totalQuantity} pcs
+                </span>
+              </div>
+            </div>
+
+            {/* Items under this Style */}
+            <div className="space-y-6">
+              {Object.values(activePrintStyle.items).map((itemGroup) => (
+                <div key={itemGroup.item_name} className="space-y-3 page-break-inside-avoid">
+                  {/* Item Header */}
+                  <div className="flex items-center justify-between border-b-2 border-slate-300 pb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 text-sm uppercase tracking-wide">
+                        Item: {itemGroup.item_name}
+                      </span>
+                      <span className="text-xs text-slate-500 font-normal">
+                        ({Object.keys(itemGroup.colors).length} {Object.keys(itemGroup.colors).length === 1 ? "color" : "colors"})
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
+                      Item Total: {itemGroup.totalQuantity} pcs
+                    </span>
+                  </div>
+
+                  {/* Colors under this Item */}
+                  <div className="space-y-3.5">
+                    {Object.values(itemGroup.colors)
+                      .sort((a, b) => a.color_name.localeCompare(b.color_name))
+                      .map((colorGroup) => {
+                        const sortedSizes = Object.values(colorGroup.sizes).sort((a, b) => {
+                          const numA = parseFloat(a.size);
+                          const numB = parseFloat(b.size);
+                          if (!isNaN(numA) && !isNaN(numB)) {
+                            if (numA !== numB) return numA - numB;
+                          }
+                          return a.size.localeCompare(b.size, undefined, { numeric: true, sensitivity: "base" });
+                        });
+
+                        return (
+                          <div
+                            key={colorGroup.color_name}
+                            className="page-break-inside-avoid p-3 border border-slate-300 rounded-sm bg-white space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                                  Color:
+                                </span>
+                                <span className="text-xs font-black text-slate-900 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
+                                  {colorGroup.color_name}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  ({sortedSizes.length} {sortedSizes.length === 1 ? "size" : "sizes"})
+                                </span>
+                              </div>
+                              <span className="text-xs font-bold text-emerald-900 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded">
+                                Color Total: {colorGroup.totalQuantity} pcs
+                              </span>
+                            </div>
+
+                            {/* Horizontal Matrix Table */}
+                            <div className="overflow-x-auto border border-slate-400 rounded-xs">
+                              <table className="w-full border-collapse text-xs">
+                                <thead>
+                                  <tr className="bg-slate-100 border-b border-slate-400">
+                                    <th className="px-3 py-1.5 text-left font-black uppercase text-slate-700 border-r border-slate-400 w-24">
+                                      Size
+                                    </th>
+                                    {sortedSizes.map((sizeItem) => (
+                                      <th
+                                        key={sizeItem.size}
+                                        className="px-2.5 py-1.5 text-center font-black text-slate-900 border-r border-slate-300 last:border-r-0 min-w-[36px]"
+                                      >
+                                        {sizeItem.size}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr className="bg-white">
+                                    <th className="px-3 py-1.5 text-left font-black uppercase text-slate-700 bg-slate-50 border-r border-slate-400 w-24">
+                                      Quantity
+                                    </th>
+                                    {sortedSizes.map((sizeItem) => (
+                                      <td
+                                        key={sizeItem.size}
+                                        className="px-2.5 py-1.5 text-center font-bold text-slate-900 border-r border-slate-300 last:border-r-0 min-w-[36px]"
+                                      >
+                                        {sizeItem.quantity}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Print Footer */}
+            <div className="mt-8 pt-4 border-t border-slate-300 flex justify-between items-center text-[10px] text-slate-500">
+              <span>EVENVIBE UNIFORMS &bull; Style Production &amp; Stitching Breakdown</span>
+              <span>Page generated automatically from EVENVIBE Management</span>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Scoped CSS for Isolated Style Printing */}
+      <style>{`
+        @media print {
+          body.printing-style-breakdown > *:not(#style-print-portal) {
+            display: none !important;
+          }
+          body.printing-style-breakdown #style-print-portal {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            visibility: visible !important;
+          }
+          body.printing-style-breakdown #style-print-portal * {
+            visibility: visible !important;
+          }
+          body.printing-style-breakdown {
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -312,7 +312,7 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
       : "Ready";
 
     const rawQcItems = qcItemsResult.data || [];
-    const activeDeliveryRows: DeliveryItem[] = rawQcItems
+    let activeDeliveryRows: DeliveryItem[] = rawQcItems
       .filter((item) => (item.passed_quantity || 0) > 0)
       .map((item) => ({
         id: item.id,
@@ -326,6 +326,29 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
 
     const packingRecord = packingRecordResult.data;
     const isDeliveryStage = isPacked || isDispatched || isInTransit || isDelivered;
+
+    // Fallback to requirement_items when Production/QC is bypassed
+    if (activeDeliveryRows.length === 0 && isDeliveryStage && requirement?.requirement_items) {
+      activeDeliveryRows = (requirement.requirement_items as Array<{
+        id: string;
+        item_name: string;
+        style_name?: string | null;
+        color?: string | null;
+        size: string;
+        quantity: number;
+      }>)
+        .filter((item) => (item.quantity || 0) > 0)
+        .map((item) => ({
+          id: item.id,
+          style_name: item.style_name?.trim() || "Standard",
+          item_name: item.item_name,
+          color: item.color?.trim() || "Default",
+          size: item.size,
+          quantity: item.quantity,
+          status: itemStatusLabel,
+        }));
+    }
+
     const hasDeliveryData = (isDeliveryStage || !!packingRecord) && activeDeliveryRows.length > 0;
     const totalDeliveryQuantity = activeDeliveryRows.reduce((sum, item) => sum + item.quantity, 0);
     const totalDeliveryItems = activeDeliveryRows.length;

@@ -140,3 +140,98 @@ export interface DeliveryProofImage {
     role: string | null
   } | null
 }
+
+export type DeliveryActualClassification = 'exact' | 'extra' | 'short' | 'not_delivered';
+
+export interface OrderDeliveryActualItem {
+  id: string;
+  order_id: string;
+  style_name: string;
+  item_name: string;
+  color: string;
+  size: string;
+  original_quantity: number;
+  actual_quantity: number;
+  difference: number;
+  classification: DeliveryActualClassification;
+  extra_quantity: number;
+  short_quantity: number;
+  not_delivered_quantity: number;
+  batch_id?: string | null;
+  batch_number?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DeliveryBatchStatus = 'draft' | 'dispatched' | 'in_transit' | 'delivered' | 'cancelled';
+
+export interface OrderDeliveryBatch {
+  id: string;
+  order_id: string;
+  batch_number: number;
+  batch_reference: string;
+  status: DeliveryBatchStatus;
+  dispatched_at: string | null;
+  delivered_at: string | null;
+  courier_name: string | null;
+  tracking_number: string | null;
+  estimated_delivery: string | null;
+  remarks: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  items?: OrderDeliveryActualItem[];
+}
+
+export type DeliveryReturnStatus = 'pending' | 'dispatched' | 'in_transit' | 'completed' | 'cancelled';
+
+export interface OrderDeliveryReturn {
+  id: string;
+  order_id: string;
+  school_id: string;
+  style_name: string;
+  item_name: string;
+  color: string;
+  size: string;
+  quantity: number;
+  reason: string;
+  status: DeliveryReturnStatus;
+  dispatch_date: string | null;
+  tracking_details: string | null;
+  remarks: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  schools?: { id: string; name: string } | null;
+}
+
+export type FollowupDispatchStatus = 'scheduled' | 'dispatched' | 'in_transit' | 'delivered' | 'cancelled';
+
+export interface OrderFollowupDispatchItem {
+  id: string;
+  followup_dispatch_id: string;
+  order_id: string;
+  style_name: string;
+  item_name: string;
+  color: string;
+  size: string;
+  quantity: number;
+  created_at: string;
+}
+
+export interface OrderFollowupDispatch {
+  id: string;
+  order_id: string;
+  school_id: string;
+  dispatch_reference: string;
+  courier_name: string | null;
+  tracking_number: string | null;
+  dispatch_date: string;
+  status: FollowupDispatchStatus;
+  remarks: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  items?: OrderFollowupDispatchItem[];
+  schools?: { id: string; name: string } | null;
+}

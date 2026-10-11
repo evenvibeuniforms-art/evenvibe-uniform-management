@@ -202,35 +202,36 @@ export default function LoginForm() {
       </div>
 
       {/* RIGHT COLUMN: Visual Environment (25-30% on Desktop) */}
-      <div className="hidden lg:block lg:w-[25%] xl:w-[25%] relative z-0 bg-[#EAF6E5]/40 overflow-hidden lg:h-[100svh]">
-        
-        {/* Curving decorative organic edge overlaying the image */}
-        <svg className="absolute left-0 top-0 h-full w-[150px] z-20 text-[#F7F9F6] fill-current" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <path d="M0,0 Q100,50 0,100 Z" />
-        </svg>
+      <div className="hidden lg:block lg:w-[25%] xl:w-[25%] z-0 bg-[#EAF6E5]/40 overflow-hidden lg:h-[100svh]">
+        <div className="relative w-full h-full">
+          {/* Curving decorative organic edge overlaying the image */}
+          <svg className="absolute left-0 top-0 h-full w-[150px] z-20 text-[#F7F9F6] fill-current" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <path d="M0,0 Q100,50 0,100 Z" />
+          </svg>
 
-        {/* Brand Atmosphere Statement */}
-        <div className="absolute top-24 right-16 z-30 transform rotate-[-4deg]">
-          <h3 className="font-serif italic text-3xl xl:text-4xl leading-tight text-[#17452D]/90 text-right">
-            Uniforms <br />
-            for a brighter <br />
-            tomorrow
-          </h3>
-          <div className="h-0.5 w-24 bg-[#65B741]/60 mt-4 ml-auto rounded-full rotate-[-2deg]" />
+          {/* Brand Atmosphere Statement */}
+          <div className="absolute top-24 right-16 z-30 transform rotate-[-4deg]">
+            <h3 className="font-serif italic text-3xl xl:text-4xl leading-tight text-[#17452D]/90 text-right">
+              Uniforms <br />
+              for a brighter <br />
+              tomorrow
+            </h3>
+            <div className="h-0.5 w-24 bg-[#65B741]/60 mt-4 ml-auto rounded-full rotate-[-2deg]" />
+          </div>
+
+          {/* High Quality Campus Visual Area */}
+          <Image
+            src="/images/login-school-campus.jpg"
+            alt="Premium modern school campus"
+            fill
+            priority
+            sizes="(min-width: 1024px) 50vw, 100vw"
+            className="object-cover opacity-90 mix-blend-multiply"
+          />
+
+          {/* Soft overlay gradient to blend into the green theme */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#65B741]/20 to-transparent" />
         </div>
-
-        {/* High Quality Campus Visual Area */}
-        <Image
-          src="/images/login-school-campus.jpg"
-          alt="Premium modern school campus"
-          fill
-          priority
-          sizes="(min-width: 1024px) 50vw, 100vw"
-          className="object-cover opacity-90 mix-blend-multiply"
-        />
-
-        {/* Soft overlay gradient to blend into the green theme */}
-        <div className="absolute inset-0 bg-gradient-to-tr from-[#65B741]/20 to-transparent" />
       </div>
 
       </div>

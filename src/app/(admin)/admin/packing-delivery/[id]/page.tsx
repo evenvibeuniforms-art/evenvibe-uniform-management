@@ -4,7 +4,13 @@ import { notFound } from "next/navigation";
 import AdminPackingDeliveryDetailsView, {
   DeliveryItemRow,
 } from "../views/AdminPackingDeliveryDetailsView";
-import { DeliveryProofImage } from "@/types/database";
+import {
+  DeliveryProofImage,
+  OrderDeliveryActualItem,
+  OrderDeliveryReturn,
+  OrderFollowupDispatch,
+  OrderDeliveryBatch,
+} from "@/types/database";
 
 export const metadata = {
   title: "Delivery | EvenVibe Admin",
@@ -26,6 +32,7 @@ export default async function AdminPackingDeliveryDetailsPage({
       id,
       order_number,
       status,
+      requirement_id,
       courier_name,
       tracking_number,
       estimated_delivery,
@@ -38,6 +45,18 @@ export default async function AdminPackingDeliveryDetailsPage({
       schools (
         id,
         name
+      ),
+      requirements (
+        id,
+        requirement_items (
+          id,
+          item_name,
+          style_id,
+          style_name,
+          color,
+          size,
+          quantity
+        )
       )
     `)
     .eq("id", id)
@@ -47,7 +66,7 @@ export default async function AdminPackingDeliveryDetailsPage({
     notFound();
   }
 
-  // 2. Concurrently fetch QC Record, QC Items, Delivery/Packing Record, and History
+  // 2. Concurrently fetch QC Record, QC Items, Delivery/Packing Record, History, Actuals, Returns, Follow-ups
   const [
     { data: qcRecord },
     { data: qcItems },
@@ -55,6 +74,10 @@ export default async function AdminPackingDeliveryDetailsPage({
     { data: packingHistoryRaw },
     { data: orderStatusHistory },
     { data: proofImagesRaw },
+    { data: actualItemsRaw },
+    { data: returnsRaw },
+    { data: followupDispatchesRaw },
+    { data: deliveryBatchesRaw },
   ] = await Promise.all([
     supabase
       .from("quality_check_records")
@@ -115,6 +138,25 @@ export default async function AdminPackingDeliveryDetailsPage({
       `)
       .eq("order_id", id)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("order_delivery_actual_items")
+      .select("*")
+      .eq("order_id", id),
+    supabase
+      .from("order_delivery_returns")
+      .select("*, schools(id, name)")
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("order_followup_dispatches")
+      .select("*, items:order_followup_dispatch_items(*), schools(id, name)")
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("order_delivery_batches")
+      .select("*, items:order_delivery_actual_items(*)")
+      .eq("order_id", id)
+      .order("batch_number", { ascending: true }),
   ]);
 
   // Section 6, 8, 9: Delivery Quantity Source & Zero Quantity Rule
@@ -133,7 +175,7 @@ export default async function AdminPackingDeliveryDetailsPage({
     ? "in_progress"
     : "ready";
 
-  const deliveryItems: DeliveryItemRow[] = (qcItems || [])
+  let deliveryItems: DeliveryItemRow[] = (qcItems || [])
     .filter((item) => (item.passed_quantity || 0) > 0)
     .map((item) => ({
       id: item.id,
@@ -144,6 +186,23 @@ export default async function AdminPackingDeliveryDetailsPage({
       quantity: item.passed_quantity || 0,
       status: rowStatus,
     }));
+
+  // Fallback to requirement_items when Production/QC is bypassed
+  if (deliveryItems.length === 0 && order.requirements) {
+    const req = Array.isArray(order.requirements) ? order.requirements[0] : order.requirements;
+    const reqItems = req?.requirement_items || [];
+    deliveryItems = reqItems
+      .filter((item) => (item.quantity || 0) > 0)
+      .map((item) => ({
+        id: item.id,
+        styleName: item.style_name?.trim() || "Standard",
+        itemName: item.item_name,
+        color: item.color?.trim() || "Default",
+        size: item.size,
+        quantity: item.quantity,
+        status: rowStatus,
+      }));
+  }
 
   interface RawHistoryItem {
     id: string;
@@ -184,6 +243,19 @@ export default async function AdminPackingDeliveryDetailsPage({
     }));
   }
 
+  const req = Array.isArray(order.requirements) ? order.requirements[0] : order.requirements;
+  const requirementItems = req?.requirement_items || [];
+
+  const formattedReturns: OrderDeliveryReturn[] = (returnsRaw || []).map((r) => ({
+    ...r,
+    schools: Array.isArray(r.schools) ? r.schools[0] : r.schools,
+  }));
+
+  const formattedFollowups: OrderFollowupDispatch[] = (followupDispatchesRaw || []).map((f) => ({
+    ...f,
+    schools: Array.isArray(f.schools) ? f.schools[0] : f.schools,
+  }));
+
   return (
     <AdminPackingDeliveryDetailsView
       order={formattedOrder}
@@ -193,6 +265,11 @@ export default async function AdminPackingDeliveryDetailsPage({
       packingHistory={formattedHistory}
       orderStatusHistory={orderStatusHistory || []}
       proofImages={proofImages}
+      savedActualItems={(actualItemsRaw || []) as OrderDeliveryActualItem[]}
+      deliveryReturns={formattedReturns}
+      followupDispatches={formattedFollowups}
+      deliveryBatches={(deliveryBatchesRaw || []) as OrderDeliveryBatch[]}
+      requirementItems={requirementItems}
     />
   );
 }

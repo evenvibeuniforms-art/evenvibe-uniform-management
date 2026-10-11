@@ -7,8 +7,8 @@ import { revalidatePath } from "next/cache";
 const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   submitted: ["under_review"],
   under_review: ["confirmed"],
-  confirmed: ["production"],
-  production: ["quality_check"],
+  confirmed: ["packed", "production"],
+  production: ["packed", "quality_check"],
   quality_check: ["packed"],
   packed: ["dispatched"],
   dispatched: ["in_transit"],

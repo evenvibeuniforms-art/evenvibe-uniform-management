@@ -4,21 +4,14 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminDashboardData } from "../types";
 import DashboardKpiCard from "./DashboardKpiCard";
-import OrderPipeline from "./OrderPipeline";
 import RecentOrders from "./RecentOrders";
 import SchoolOverview from "./SchoolOverview";
-import QuickActions from "./QuickActions";
-import ProductionOverview from "./ProductionOverview";
-import QualityCheckOverview from "./QualityCheckOverview";
-import PackingDeliveryOverview from "./PackingDeliveryOverview";
 import {
   School,
   Users,
   ShoppingBag,
   Factory,
   Clock,
-  ClipboardCheck,
-  PackageCheck,
   Truck,
   RefreshCw,
 } from "lucide-react";
@@ -92,8 +85,8 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
         </div>
       </div>
 
-      {/* Row 1: Primary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Operational KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <DashboardKpiCard
           title="Active Schools"
           value={data.primaryKPIs.activeSchoolsCount}
@@ -133,10 +126,7 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           iconColorClass="text-status-warning"
           href="/admin/production"
         />
-      </div>
 
-      {/* Row 2: Secondary Operational KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <DashboardKpiCard
           title="Pending Approvals"
           value={data.secondaryKPIs.pendingSchoolsCount}
@@ -153,26 +143,6 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
         />
 
         <DashboardKpiCard
-          title="QC Pending"
-          value={data.secondaryKPIs.qcPendingCount}
-          subtitle="Awaiting quality check"
-          icon={ClipboardCheck}
-          iconBgClass="bg-evenvibe-light"
-          iconColorClass="text-evenvibe-primary"
-          href="/admin/quality-check"
-        />
-
-        <DashboardKpiCard
-          title="Packing Pending"
-          value={data.secondaryKPIs.packingPendingCount}
-          subtitle="Ready for dispatch"
-          icon={PackageCheck}
-          iconBgClass="bg-evenvibe-light"
-          iconColorClass="text-evenvibe-primary"
-          href="/admin/packing-delivery"
-        />
-
-        <DashboardKpiCard
           title="Delivery Pending"
           value={data.secondaryKPIs.deliveryPendingCount}
           subtitle="On the way"
@@ -181,19 +151,6 @@ export default function AdminDashboardView({ data, userRole }: AdminDashboardVie
           iconColorClass="text-status-info"
           href="/admin/packing-delivery"
         />
-      </div>
-
-      {/* Quick Actions Bar */}
-      <QuickActions />
-
-      {/* Order Pipeline */}
-      <OrderPipeline stages={data.pipelineStages} />
-
-      {/* Operational Summaries Grid (3 columns) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <ProductionOverview data={data.productionOverview} />
-        <QualityCheckOverview data={data.qcOverview} />
-        <PackingDeliveryOverview data={data.packingDeliveryOverview} />
       </div>
 
       {/* Detailed Tables Section */}
