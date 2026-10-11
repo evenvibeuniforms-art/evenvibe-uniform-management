@@ -1125,8 +1125,8 @@ export default function UniformDesignsClient({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold uppercase text-slate-600">Item Type (Immutable)</Label>
-                  <Input value={editingStyle.item_name} disabled className="bg-slate-100 text-slate-600" />
+                  <Label htmlFor="item_name" className="text-xs font-semibold uppercase text-slate-600">Item Type (Immutable)</Label>
+                  <Input id="item_name" name="item_name" value={editingStyle.item_name} disabled className="bg-slate-100 text-slate-600" />
                 </div>
               </div>
 

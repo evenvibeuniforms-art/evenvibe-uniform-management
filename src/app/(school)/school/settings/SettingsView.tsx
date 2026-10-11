@@ -349,7 +349,7 @@ function SchoolInfoForm({ school }: { school: SchoolData }) {
                 <FormItem>
                   <FormLabel>Contact Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Primary contact name" {...field} />
+                    <Input id="contact_name" placeholder="Primary contact name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -363,7 +363,7 @@ function SchoolInfoForm({ school }: { school: SchoolData }) {
                 <FormItem>
                   <FormLabel>Contact Phone</FormLabel>
                   <FormControl>
-                    <Input placeholder="+91 98765 43210" {...field} />
+                    <Input id="contact_phone" placeholder="+91 98765 43210" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -378,7 +378,7 @@ function SchoolInfoForm({ school }: { school: SchoolData }) {
               <FormItem>
                 <FormLabel>Street Address</FormLabel>
                 <FormControl>
-                  <Input placeholder="Building, Street, Area" {...field} />
+                  <Input id="address" placeholder="Building, Street, Area" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -393,7 +393,7 @@ function SchoolInfoForm({ school }: { school: SchoolData }) {
                 <FormItem>
                   <FormLabel>City</FormLabel>
                   <FormControl>
-                    <Input placeholder="City" {...field} />
+                    <Input id="city" placeholder="City" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -407,7 +407,7 @@ function SchoolInfoForm({ school }: { school: SchoolData }) {
                 <FormItem>
                   <FormLabel>District</FormLabel>
                   <FormControl>
-                    <Input placeholder="District" {...field} />
+                    <Input id="district" placeholder="District" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -421,7 +421,7 @@ function SchoolInfoForm({ school }: { school: SchoolData }) {
                 <FormItem>
                   <FormLabel>Pincode</FormLabel>
                   <FormControl>
-                    <Input placeholder="6 digits" {...field} />
+                    <Input id="pincode" placeholder="6 digits" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

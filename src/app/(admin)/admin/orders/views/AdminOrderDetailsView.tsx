@@ -574,16 +574,16 @@ export default function AdminOrderDetailsView({
                   {nextStatus === "dispatched" && (
                     <div className="space-y-4 bg-slate-50 p-4 rounded-md border">
                       <div className="space-y-2">
-                        <Label>Courier Name</Label>
-                        <Input value={courierName} onChange={e => setCourierName(e.target.value)} />
+                        <Label htmlFor="courierName">Courier Name</Label>
+                        <Input id="courierName" name="courierName" value={courierName} onChange={e => setCourierName(e.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <Label>Tracking Number</Label>
-                        <Input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} />
+                        <Label htmlFor="trackingNumber">Tracking Number</Label>
+                        <Input id="trackingNumber" name="trackingNumber" value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <Label>Estimated Delivery (YYYY-MM-DD)</Label>
-                        <Input type="date" value={estimatedDelivery} onChange={e => setEstimatedDelivery(e.target.value)} />
+                        <Label htmlFor="estimatedDelivery">Estimated Delivery (YYYY-MM-DD)</Label>
+                        <Input id="estimatedDelivery" name="estimatedDelivery" type="date" value={estimatedDelivery} onChange={e => setEstimatedDelivery(e.target.value)} />
                       </div>
                     </div>
                   )}

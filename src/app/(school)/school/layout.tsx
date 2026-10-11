@@ -34,6 +34,7 @@ export default async function SchoolLayout({
             alt="EVENVIBE Logo"
             width={120}
             height={32}
+            style={{ width: "auto", height: "auto" }}
             className="h-8 w-auto object-contain rounded-md"
             priority
           />
