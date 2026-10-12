@@ -1,7 +1,7 @@
 "use client";
 
 import { OrderDetails, cancelOrder, getOrderDetails, OrderHistoryItem, OrderStatus } from "../actions";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -196,6 +196,58 @@ export function SchoolOrderDetailsView({ order: initialOrder }: { order: OrderDe
       });
     },
   });
+
+  // Realtime updates for order delivery batches
+  useRealtimeSubscription({
+    table: "order_delivery_batches",
+    filter: `order_id=eq.${initialOrder.id}`,
+    onEvent: () => {
+      getOrderDetails(initialOrder.id).then((res) => {
+        if (res.order) setOrder(res.order);
+      });
+    },
+  });
+
+  // Realtime updates for batch actual items
+  useRealtimeSubscription({
+    table: "order_delivery_actual_items",
+    filter: `order_id=eq.${initialOrder.id}`,
+    onEvent: () => {
+      getOrderDetails(initialOrder.id).then((res) => {
+        if (res.order) setOrder(res.order);
+      });
+    },
+  });
+
+  const [selectedBatchNumber, setSelectedBatchNumber] = useState<number | null>(null);
+
+  const activeBatchNumber = useMemo(() => {
+    if (!order.delivery_batches || order.delivery_batches.length === 0) return null;
+    if (
+      selectedBatchNumber !== null &&
+      order.delivery_batches.some((b) => b.batch_number === selectedBatchNumber)
+    ) {
+      return selectedBatchNumber;
+    }
+    return order.delivery_batches[0].batch_number;
+  }, [order.delivery_batches, selectedBatchNumber]);
+
+  const selectedBatch = useMemo(() => {
+    if (!order.delivery_batches || order.delivery_batches.length === 0) return null;
+    return (
+      order.delivery_batches.find((b) => b.batch_number === activeBatchNumber) ||
+      order.delivery_batches[0]
+    );
+  }, [order.delivery_batches, activeBatchNumber]);
+
+  const batchDeliveredItems = useMemo(() => {
+    if (!selectedBatch || !selectedBatch.items) return [];
+    return selectedBatch.items.filter((item) => (item.actual_quantity || 0) > 0);
+  }, [selectedBatch]);
+
+  const batchTotalDeliveredQuantity = useMemo(() => {
+    return batchDeliveredItems.reduce((sum, item) => sum + (item.actual_quantity || 0), 0);
+  }, [batchDeliveredItems]);
 
   const handleCancel = async () => {
     setIsCancelling(true);
@@ -473,6 +525,286 @@ export function SchoolOrderDetailsView({ order: initialOrder }: { order: OrderDe
       </CardContent>
     </Card>
   );
+
+  // 2.5 BATCH-WISE DELIVERY HISTORY (INDIVIDUAL BATCHES & SPECIFIC RECORDS)
+  const renderDeliveryBatchesCard = () => {
+    const batches = order.delivery_batches || [];
+    const hasBatches = batches.length > 0;
+
+    return (
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="bg-slate-50/50 border-b pb-3">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div>
+              <CardTitle className="text-slate-900 text-lg flex items-center gap-2">
+                <Truck className="h-5 w-5 text-evenvibe-primary" /> Delivery Batches & History
+              </CardTitle>
+              <p className="text-xs text-slate-500 mt-1">
+                View every delivery consignment batch dispatched for this order. Click a batch to inspect its delivered items and tracking.
+              </p>
+            </div>
+            {hasBatches && (
+              <Badge variant="outline" className="text-slate-700 bg-white border-slate-300 text-xs font-semibold">
+                {batches.length} {batches.length === 1 ? "Batch" : "Batches"}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-6">
+          {!hasBatches ? (
+            <div className="text-center py-10 px-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
+              <Package className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-60" />
+              <p className="text-sm font-semibold text-slate-700">No delivery batches recorded yet</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                When EvenVibe dispatches your uniform items in one or more consignment batches, each batch will appear here with full tracking and delivered item details.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Batch Selector Pills */}
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Select Delivery Batch:
+                </label>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {batches.map((batch) => {
+                    const isSelected = selectedBatch?.batch_number === batch.batch_number;
+                    const isDraft = batch.status === "draft";
+                    const isDelivered = batch.status === "delivered";
+                    const isDispatched = batch.status === "dispatched" || batch.status === "in_transit";
+
+                    return (
+                      <button
+                        key={batch.id || batch.batch_number}
+                        type="button"
+                        onClick={() => setSelectedBatchNumber(batch.batch_number)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer border ${
+                          isSelected
+                            ? "bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-evenvibe-primary/40"
+                            : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-2xs"
+                        }`}
+                      >
+                        <Package className={`w-4 h-4 ${isSelected ? "text-emerald-400" : "text-evenvibe-primary"}`} />
+                        <span className="font-bold">Batch #{batch.batch_number}</span>
+                        <span className="text-[11px] opacity-75 font-medium">({batch.batch_reference})</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                            isSelected
+                              ? "bg-white/20 text-white"
+                              : isDelivered
+                              ? "bg-emerald-100 text-emerald-800"
+                              : isDispatched
+                              ? "bg-blue-100 text-blue-800"
+                              : isDraft
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-800"
+                          }`}
+                        >
+                          {isDraft ? "In Preparation" : batch.status === "in_transit" ? "On the Way" : statusLabels[batch.status] || batch.status}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Selected Batch Details */}
+              {selectedBatch && (
+                <div className="bg-slate-50/70 rounded-xl p-4 sm:p-5 border border-slate-200/80 space-y-5">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200/80 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-base font-bold text-slate-900">
+                          Batch #{selectedBatch.batch_number}
+                        </h4>
+                        <span className="text-xs text-slate-500 font-semibold">
+                          ({selectedBatch.batch_reference})
+                        </span>
+                        <Badge
+                          className={`${
+                            selectedBatch.status === "delivered"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : selectedBatch.status === "dispatched" || selectedBatch.status === "in_transit"
+                              ? "bg-blue-100 text-blue-800"
+                              : selectedBatch.status === "draft"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-800"
+                          } border-0 text-xs font-semibold px-2 py-0.5`}
+                        >
+                          {selectedBatch.status === "draft"
+                            ? "Active / In Preparation"
+                            : statusLabels[selectedBatch.status] || selectedBatch.status}
+                        </Badge>
+                        {selectedBatch.status === "draft" ? (
+                          <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-300 text-[10px]">
+                            Currently Active Batch
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-slate-600 bg-white border-slate-300 text-[10px]">
+                            Historical Batch
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Batch Metrics & Logistics Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-2xs">
+                      <p className="text-[11px] font-medium text-slate-500">Delivered Units</p>
+                      <p className="text-lg font-bold text-slate-900 leading-tight mt-0.5">
+                        {batchTotalDeliveredQuantity}
+                        <span className="text-xs font-normal text-slate-400 ml-1">pcs</span>
+                      </p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-2xs">
+                      <p className="text-[11px] font-medium text-slate-500">Delivered Items</p>
+                      <p className="text-lg font-bold text-slate-900 leading-tight mt-0.5">
+                        {batchDeliveredItems.length}
+                        <span className="text-xs font-normal text-slate-400 ml-1">items</span>
+                      </p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-2xs">
+                      <p className="text-[11px] font-medium text-slate-500">Courier Partner</p>
+                      <p className="text-xs font-semibold text-slate-900 mt-1 truncate" title={selectedBatch.courier_name || "Not available"}>
+                        {selectedBatch.courier_name || "Not available"}
+                      </p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-2xs">
+                      <p className="text-[11px] font-medium text-slate-500">Tracking Number</p>
+                      <p className="text-xs font-semibold text-slate-900 mt-1 truncate" title={selectedBatch.tracking_number || "Not available"}>
+                        {selectedBatch.tracking_number || "Not available"}
+                      </p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-2xs">
+                      <p className="text-[11px] font-medium text-slate-500">Dispatched Date</p>
+                      <p className="text-xs font-semibold text-slate-900 mt-1">
+                        {formatDeliveryDateTime(selectedBatch.dispatched_at)}
+                      </p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-2xs">
+                      <p className="text-[11px] font-medium text-slate-500">Delivered Date</p>
+                      <p className="text-xs font-semibold text-slate-900 mt-1">
+                        {formatDeliveryDateTime(selectedBatch.delivered_at)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Estimated Delivery & Remarks (if present) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="bg-white p-3 rounded-lg border border-slate-200/80 text-xs">
+                      <span className="font-semibold text-slate-700">Estimated Delivery: </span>
+                      <span className="text-slate-600">{formatDeliveryDate(selectedBatch.estimated_delivery)}</span>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg border border-slate-200/80 text-xs">
+                      <span className="font-semibold text-slate-700">Batch Remarks: </span>
+                      <span className="text-slate-600">{selectedBatch.remarks?.trim() || "No remarks recorded for this batch."}</span>
+                    </div>
+                  </div>
+
+                  {/* Batch Items Table */}
+                  <div>
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
+                      Delivered Items in Batch #{selectedBatch.batch_number}:
+                    </h5>
+                    {batchDeliveredItems.length > 0 ? (
+                      <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-2xs">
+                        <table className="w-full text-sm text-left">
+                          <thead className="bg-slate-50 text-slate-700 text-xs font-semibold uppercase tracking-wider border-b border-slate-200">
+                            <tr>
+                              <th className="py-3 px-4">Style</th>
+                              <th className="py-3 px-4">Item</th>
+                              <th className="py-3 px-4">Color</th>
+                              <th className="py-3 px-4">Size</th>
+                              <th className="py-3 px-4 text-center">Original Ordered</th>
+                              <th className="py-3 px-4 text-center">Delivered in Batch #{selectedBatch.batch_number}</th>
+                              <th className="py-3 px-4 text-center">Batch Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {batchDeliveredItems.map((item) => {
+                              const origQty = item.original_quantity || 0;
+                              const actQty = item.actual_quantity || 0;
+                              const diff = item.difference !== undefined && item.difference !== 0 ? item.difference : (actQty - origQty);
+                              const isExtra = (item.extra_quantity && item.extra_quantity > 0) || diff > 0;
+                              const isShort = (item.short_quantity && item.short_quantity > 0) || diff < 0;
+                              const isExact = !isExtra && !isShort && actQty > 0;
+                              const extraQty = item.extra_quantity || (diff > 0 ? diff : 0);
+                              const shortQty = item.short_quantity || (diff < 0 ? Math.abs(diff) : 0);
+
+                              return (
+                                <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                                  <td className="py-3 px-4 font-medium text-slate-900">{item.style_name}</td>
+                                  <td className="py-3 px-4 text-slate-700">{item.item_name}</td>
+                                  <td className="py-3 px-4 text-slate-600">{item.color}</td>
+                                  <td className="py-3 px-4 font-medium text-slate-800">
+                                    <span className="bg-slate-100 px-2 py-0.5 rounded text-xs">Size {item.size}</span>
+                                  </td>
+                                  <td className="py-3 px-4 text-center font-medium text-slate-500">
+                                    {origQty > 0 ? `${origQty} units` : "—"}
+                                  </td>
+                                  <td className="py-3 px-4 text-center font-bold text-slate-900 text-base">
+                                    {actQty}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    {isExtra ? (
+                                      <Badge className="bg-blue-100 text-blue-800 border-0 text-xs font-semibold px-2 py-0.5">
+                                        +{extraQty} Extra
+                                      </Badge>
+                                    ) : isShort ? (
+                                      <Badge className="bg-amber-100 text-amber-800 border-0 text-xs font-semibold px-2 py-0.5">
+                                        -{shortQty} Short / Pending
+                                      </Badge>
+                                    ) : isExact ? (
+                                      <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs font-semibold px-2 py-0.5">
+                                        Exact Match
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-xs text-slate-600">
+                                        {item.classification || "Delivered"}
+                                      </Badge>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot className="bg-slate-50/80 border-t border-slate-200 font-medium text-slate-800">
+                            <tr>
+                              <td colSpan={5} className="py-3 px-4 text-right font-semibold text-slate-700">
+                                Total Delivered in Batch #{selectedBatch.batch_number}:
+                              </td>
+                              <td className="py-3 px-4 text-center font-bold text-slate-900 text-base">
+                                {batchTotalDeliveredQuantity}
+                              </td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 px-4 rounded-xl border border-dashed border-slate-200 bg-white">
+                        <Package className="w-7 h-7 text-slate-400 mx-auto mb-1.5 opacity-60" />
+                        <p className="text-xs font-semibold text-slate-700">No delivered items in this batch</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5 max-w-sm mx-auto">
+                          This batch does not currently have any confirmed delivered item quantities recorded.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   // 3. DELIVERY DETAILS (PRIMARY SECTION)
   const renderDeliveryDetailsCard = () => (
@@ -946,6 +1278,9 @@ export function SchoolOrderDetailsView({ order: initialOrder }: { order: OrderDe
         </div>
       </div>
 
+      {/* DELIVERY BATCHES */}
+      {renderDeliveryBatchesCard()}
+
       {/* DELIVERY PROOF */}
       {renderDeliveryProofCard()}
     </>
@@ -1025,13 +1360,16 @@ export function SchoolOrderDetailsView({ order: initialOrder }: { order: OrderDe
           {/* 3. FINAL DELIVERY (PRIMARY HERO SECTION) */}
           {renderFinalDeliveryCard()}
 
-          {/* 4. DELIVERY DETAILS */}
+          {/* 4. DELIVERY BATCHES (BATCH-WISE HISTORY & DETAILS) */}
+          {renderDeliveryBatchesCard()}
+
+          {/* 5. DELIVERY DETAILS */}
           {renderDeliveryDetailsCard()}
 
-          {/* 5. DELIVERY PROOF */}
+          {/* 6. DELIVERY PROOF */}
           {renderDeliveryProofCard()}
 
-          {/* 6. ORIGINAL ORDER REFERENCE (COLLAPSED / SECONDARY) */}
+          {/* 7. ORIGINAL ORDER REFERENCE (COLLAPSED / SECONDARY) */}
           {renderOriginalOrderReferenceCard()}
         </>
       ) : (

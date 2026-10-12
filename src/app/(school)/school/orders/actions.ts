@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireSchoolAdmin } from "@/lib/auth/server";
 import { revalidatePath } from "next/cache";
-import { DeliveryProofImage } from "@/types/database";
+import { DeliveryProofImage, OrderDeliveryBatch, OrderDeliveryActualItem } from "@/types/database";
 
 export type OrderStatus = 
   | 'submitted' 
@@ -14,7 +14,7 @@ export type OrderStatus =
   | 'packed' 
   | 'dispatched'
   | 'in_transit' 
-  | 'delivered'
+  | 'delivered' 
   | 'cancelled';
 
 export type OrderHistoryItem = {
@@ -68,6 +68,7 @@ export type OrderDetails = {
   total_delivery_quantity?: number;
   total_delivery_items?: number;
   has_delivery_data?: boolean;
+  delivery_batches?: OrderDeliveryBatch[];
   created_at: string;
   is_legacy?: boolean;
   tracking_mode?: 'legacy' | 'tracked';
@@ -234,7 +235,15 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
     // Concurrently fetch completed sizes, eligible students, delivery proof images, QC items, and packing record
     const needsEligible = data.status === 'submitted' || data.status === 'under_review';
     
-    const [trackedResult, eligibleResult, proofResult, qcItemsResult, packingRecordResult] = await Promise.all([
+    const [
+      trackedResult,
+      eligibleResult,
+      proofResult,
+      qcItemsResult,
+      packingRecordResult,
+      batchesResult,
+      actualItemsResult,
+    ] = await Promise.all([
       supabase
         .from('requirement_students')
         .select('*', { count: 'exact', head: true })
@@ -274,7 +283,23 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
         .select('id, status, total_quantity, packed_quantity, remarks')
         .eq('order_id', data.id)
         .maybeSingle(),
+      supabase
+        .from('order_delivery_batches')
+        .select('*, items:order_delivery_actual_items(*)')
+        .eq('order_id', data.id)
+        .order('batch_number', { ascending: true }),
+      supabase
+        .from('order_delivery_actual_items')
+        .select('*')
+        .eq('order_id', data.id),
     ]);
+
+    if (batchesResult.error) {
+      console.error("Error fetching order delivery batches:", batchesResult.error);
+    }
+    if (actualItemsResult.error) {
+      console.error("Error fetching order delivery actual items:", actualItemsResult.error);
+    }
 
     const completedSizes = trackedResult.count || 0;
     const pendingCount = Math.max(0, requirement.total_students - completedSizes);
@@ -374,6 +399,50 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
       packingRecord?.remarks ||
       null;
 
+    // Delivery Batches processing
+    const rawBatches = (batchesResult.data || []) as (OrderDeliveryBatch & { items?: OrderDeliveryActualItem[] })[];
+    const allActualItems = (actualItemsResult.data || []) as OrderDeliveryActualItem[];
+
+    let deliveryBatches: OrderDeliveryBatch[] = rawBatches.map((b) => {
+      let batchItems: OrderDeliveryActualItem[] = Array.isArray(b.items) ? b.items : [];
+      if (batchItems.length === 0 && allActualItems.length > 0) {
+        batchItems = allActualItems.filter(
+          (item) => item.batch_id === b.id || (item.batch_number === b.batch_number && !item.batch_id)
+        );
+      }
+      return {
+        ...b,
+        items: batchItems,
+      };
+    });
+
+    // Fallback if legacy actual records exist prior to order_delivery_batches population
+    if (deliveryBatches.length === 0 && allActualItems.length > 0) {
+      const distinctNums = Array.from(new Set(allActualItems.map((s) => s.batch_number || 1))).sort((a, b) => a - b);
+      deliveryBatches = distinctNums.map((num) => {
+        const itemsForBatch = allActualItems.filter((s) => (s.batch_number || 1) === num);
+        return {
+          id: itemsForBatch[0]?.batch_id || `batch-${num}`,
+          order_id: data.id,
+          batch_number: num,
+          batch_reference: `BATCH-${String(num).padStart(3, "0")}`,
+          status: ["dispatched", "in_transit", "delivered"].includes(data.status)
+            ? (data.status as "dispatched" | "in_transit" | "delivered")
+            : "delivered",
+          courier_name: data.courier_name,
+          tracking_number: data.tracking_number,
+          estimated_delivery: data.estimated_delivery,
+          remarks: data.delivery_remarks || null,
+          created_by: null,
+          created_at: data.created_at,
+          updated_at: data.created_at,
+          dispatched_at: shippedAt,
+          delivered_at: deliveredAt,
+          items: itemsForBatch,
+        };
+      });
+    }
+
     const isLegacy = false;
     const trackingMode: 'legacy' | 'tracked' = 'tracked';
 
@@ -399,6 +468,7 @@ export async function getOrderDetails(orderId?: string): Promise<{ order: OrderD
       total_delivery_quantity: totalDeliveryQuantity,
       total_delivery_items: totalDeliveryItems,
       has_delivery_data: hasDeliveryData,
+      delivery_batches: deliveryBatches,
       created_at: data.created_at,
       is_legacy: isLegacy,
       tracking_mode: trackingMode,

@@ -7,6 +7,7 @@ import { UserMenu } from "@/components/school/UserMenu";
 import { SchoolNotificationBell } from "@/components/school/SchoolNotificationBell";
 import { getSchoolNotifications } from "@/app/(admin)/admin/notifications/actions";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { SchoolFloatingContactButton } from "@/components/school/SchoolFloatingContactButton";
 
 export default async function SchoolLayout({
   children,
@@ -91,6 +92,9 @@ export default async function SchoolLayout({
           </div>
         </main>
       </div>
+
+      {/* Floating Contact Button */}
+      <SchoolFloatingContactButton />
     </div>
   );
 }
