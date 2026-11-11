@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import Link from "next/link"
 import Image from "next/image"
-import { Users, Ruler, Package, BarChart3, ShieldCheck, Loader2, CheckCircle2 } from "lucide-react"
+import { Users, Ruler, Package, BarChart3, ShieldCheck, CheckCircle2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -136,6 +136,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [requireEmail, setRequireEmail] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -144,17 +145,31 @@ export default function SignupPage() {
     }
   })
 
+  const isProcessing = isLoading || isSubmitting
+
   const onSubmit = async (data: SignupFormValues) => {
+    if (isProcessing) return
     setError(null)
-    const result = await signupSchool(data)
-    
-    if (result.success) {
-      setSuccess(true)
-      if (result.requireEmailConfirmation) {
-        setRequireEmail(true)
+    setIsLoading(true)
+
+    // Yield execution to the browser paint cycle so React renders and paints the loading state before the network request starts
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    try {
+      const result = await signupSchool(data)
+      
+      if (result.success) {
+        setSuccess(true)
+        if (result.requireEmailConfirmation) {
+          setRequireEmail(true)
+        }
+      } else {
+        setError(result.error || "An error occurred during registration.")
+        setIsLoading(false)
       }
-    } else {
-      setError(result.error || "An error occurred during registration.")
+    } catch {
+      setError("An unexpected error occurred. Please try again.")
+      setIsLoading(false)
     }
   }
 
@@ -309,16 +324,42 @@ export default function SignupPage() {
               <div className="pt-6 border-t border-slate-100">
                 <Button 
                   type="submit" 
-                  className="w-full h-[52px] rounded-xl bg-[#65B741] hover:bg-[#17452D] text-white font-semibold text-base transition-all duration-300 shadow-md shadow-[#65B741]/20" 
-                  disabled={isSubmitting}
+                  aria-busy={isProcessing}
+                  className="w-full h-[52px] rounded-xl bg-[#65B741] hover:bg-[#17452D] text-white font-semibold text-base transition-all duration-300 shadow-md shadow-[#65B741]/20 disabled:opacity-90 disabled:cursor-not-allowed flex items-center justify-center select-none" 
+                  disabled={isProcessing}
                 >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Registering School...
-                    </>
+                  {isProcessing ? (
+                    <span className="flex items-center justify-center gap-2.5">
+                      <svg
+                        className="size-5 animate-spin text-white motion-reduce:animate-none shrink-0"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="9"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                        />
+                        <circle
+                          className="opacity-100"
+                          cx="12"
+                          cy="12"
+                          r="9"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeDasharray="42 18"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <span>Creating School Account...</span>
+                    </span>
                   ) : (
-                    "Create School Account"
+                    <span>Create School Account</span>
                   )}
                 </Button>
                 <div className="text-center text-sm text-slate-500 pt-5">

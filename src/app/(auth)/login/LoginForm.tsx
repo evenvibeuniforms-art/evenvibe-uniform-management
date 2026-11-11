@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Eye, EyeOff, Loader2, Users, Ruler, Package, BarChart3, Mail, Lock, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Users, Ruler, Package, BarChart3, Mail, Lock, ShieldCheck } from 'lucide-react'
 import { login } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,10 +13,17 @@ export default function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (isLoading) return
+
+    const formData = new FormData(e.currentTarget)
     setError(null)
     setIsLoading(true)
-    
+
+    // Yield execution to the browser paint cycle so React renders and paints the loading state before the network request starts
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
     try {
       const response = await login(formData)
       if (response?.error) {
@@ -126,7 +133,7 @@ export default function LoginForm() {
             <p className="text-sm text-slate-500 font-medium">Sign in to your EVENVIBE management account</p>
           </div>
 
-          <form action={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-xs font-bold text-slate-700">Email address</Label>
               <div className="relative">
@@ -184,11 +191,43 @@ export default function LoginForm() {
 
             <Button 
               type="submit" 
-              className="w-full h-[52px] rounded-xl bg-[#65B741] hover:bg-[#17452D] text-white font-semibold text-base transition-all duration-300 shadow-md shadow-[#65B741]/20" 
+              aria-busy={isLoading}
+              className="w-full h-[52px] rounded-xl bg-[#65B741] hover:bg-[#17452D] text-white font-semibold text-base transition-all duration-300 shadow-md shadow-[#65B741]/20 disabled:opacity-90 disabled:cursor-not-allowed flex items-center justify-center select-none"
               disabled={isLoading}
             >
-              {isLoading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2.5">
+                  <svg
+                    className="size-5 animate-spin text-white motion-reduce:animate-none shrink-0"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="9"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    />
+                    <circle
+                      className="opacity-100"
+                      cx="12"
+                      cy="12"
+                      r="9"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeDasharray="42 18"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <span>Signing in...</span>
+                </span>
+              ) : (
+                <span>Sign In</span>
+              )}
             </Button>
             
             <div className="text-center text-sm text-slate-500 pt-4">
